@@ -56,37 +56,39 @@ var (
 )
 
 func logging(c *gin.Context) {
-	r := c.Request
-	httpFields := make(map[string]interface{})
-	httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
-	httpFields[constant.UrlFieldKey] = r.URL
-	httpFields[constant.MethodFieldKey] = r.Method
-	httpFields[constant.IsServerFieldKey] = true
-	httpFields[constant.IsRequestFieldKey] = true
-	httpFields[constant.HeadersFieldKey] = r.Header
-	if r.MultipartForm != nil {
-		httpFields[constant.FormDataFieldKey] = r.MultipartForm
-	}
-	if r.Body != nil {
-		httpFields[constant.BodyFieldKey] = r.Body
-	}
-	log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
+	if cfg.Transport.Server.Rest.Logging {
+		r := c.Request
+		httpFields := make(map[string]interface{})
+		httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
+		httpFields[constant.UrlFieldKey] = r.URL
+		httpFields[constant.MethodFieldKey] = r.Method
+		httpFields[constant.IsServerFieldKey] = true
+		httpFields[constant.IsRequestFieldKey] = true
+		httpFields[constant.HeadersFieldKey] = r.Header
+		if r.MultipartForm != nil {
+			httpFields[constant.FormDataFieldKey] = r.MultipartForm
+		}
+		if r.Body != nil {
+			httpFields[constant.BodyFieldKey] = r.Body
+		}
+		log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
 
-	c.Next()
+		c.Next()
 
-	i := c.Writer.(*WriterInterceptor)
-	httpFields = make(map[string]interface{})
-	httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
-	httpFields[constant.UrlFieldKey] = r.URL
-	httpFields[constant.MethodFieldKey] = r.Method
-	httpFields[constant.IsServerFieldKey] = true
-	httpFields[constant.IsRequestFieldKey] = false
-	httpFields[constant.StatusCodeFieldKey] = i.status
-	httpFields[constant.HeadersFieldKey] = i.ResponseWriter.Header()
-	if len(i.body) > integer.Zero {
-		httpFields[constant.BodyFieldKey] = string(i.body)
+		i := c.Writer.(*WriterInterceptor)
+		httpFields = make(map[string]interface{})
+		httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
+		httpFields[constant.UrlFieldKey] = r.URL
+		httpFields[constant.MethodFieldKey] = r.Method
+		httpFields[constant.IsServerFieldKey] = true
+		httpFields[constant.IsRequestFieldKey] = false
+		httpFields[constant.StatusCodeFieldKey] = i.status
+		httpFields[constant.HeadersFieldKey] = i.ResponseWriter.Header()
+		if len(i.body) > integer.Zero {
+			httpFields[constant.BodyFieldKey] = string(i.body)
+		}
+		log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
 	}
-	log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
 }
 
 func enableCors() gin.HandlerFunc {

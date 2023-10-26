@@ -26,10 +26,12 @@ app:
 transport:
   client:
     rest:
+      logging: false # Show incoming and outgoing message globally, default is false
       timeout: 30 # Wait time in second
       insecureSkipVerify: false
   server:
     rest:
+      logging: false # Show incoming and outgoing message globally, default is false
       port:
         http: 9092
         https: 9443
@@ -180,11 +182,16 @@ otel:
 google:
   credential: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX # Credential JSON key
   cloud:
-      oauth2:
-        verification:
-          - aud: 3259999.apps.googleusercontent.com
-            email: playground@mymail.gserviceaccount.com
-            sub: "239487549823742"
+    pubsub:
+      publisher:
+        logging: false # Show outgoing message globally, default is false
+      subscriber:
+        logging: false # Show incoming message globally, default is false
+    oauth2:
+      verification:
+        - aud: 3259999.apps.googleusercontent.com
+          email: playground@mymail.gserviceaccount.com
+          sub: "239487549823742"
 
 zeebe:
   address: 1fcab5e1-1649-4c0b-ab53-cd4375877dc6.syd-1.zeebe.camunda.io:443

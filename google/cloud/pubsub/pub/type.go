@@ -10,9 +10,11 @@ type Publisher interface {
 	BatchPublish(ctx context.Context, batchData []interface{}, opts ...PublishOption) error
 	WithJsonEncoder() Publisher
 	WithAvroEncoder(schemaName string) Publisher
+	WithLogging(logging bool) Publisher
 }
 
 type PublisherImpl struct {
 	topic   *pubsub.Topic
 	encoder Encoder
+	logging bool
 }

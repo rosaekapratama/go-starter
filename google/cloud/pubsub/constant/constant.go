@@ -9,4 +9,5 @@ const (
 	MessageIdFieldKey    = "messageId"
 	MessageStateFieldKey = "messageState"
 	MessageDataFieldKey  = "messageData"
+	ErrorFieldKey        = "error"
 )

@@ -18,4 +18,5 @@ type ManagerImpl struct {
 type Client struct {
 	Resty     *resty.Client
 	transport *http.Transport
+	logging   bool
 }

@@ -115,6 +115,18 @@ func Init() {
 			},
 			Disabled: true,
 		},
+		Google: &GoogleConfig{
+			Cloud: &GoogleCloudConfig{
+				Pubsub: &GoogleCloudPubsubConfig{
+					Publisher: &GoogleCloudPubsubPublisherConfig{
+						Logging: false,
+					},
+					Subscriber: &GoogleCloudPubsubSubscriberConfig{
+						Logging: false,
+					},
+				},
+			},
+		},
 	}
 
 	// Expand environment variables

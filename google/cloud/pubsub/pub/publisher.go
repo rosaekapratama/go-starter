@@ -4,6 +4,7 @@ import (
 	"cloud.google.com/go/pubsub"
 	"context"
 	"fmt"
+	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/constant/integer"
 	"github.com/rosaekapratama/go-starter/constant/location"
 	"github.com/rosaekapratama/go-starter/constant/str"
@@ -22,13 +23,14 @@ const spanPublish = "pubsub publish %s"
 
 // NewPublisher create new pub
 func NewPublisher(client *pubsub.Client, topicId string, opts ...TopicOption) Publisher {
+	cfg := config.Instance.GetObject().Google.Cloud.Pubsub.Publisher
 	topic := client.Topic(topicId)
 	if nil != opts {
 		for _, opt := range opts {
 			opt.Apply(topic)
 		}
 	}
-	return &PublisherImpl{topic: topic}
+	return &PublisherImpl{topic: topic, logging: cfg.Logging}
 }
 
 // WithJsonEncoder set publisher encoder with JSON encoder
@@ -40,6 +42,12 @@ func (p *PublisherImpl) WithJsonEncoder() Publisher {
 // WithAvroEncoder set publisher encoder with AVRO encoder
 func (p *PublisherImpl) WithAvroEncoder(schemaName string) Publisher {
 	p.encoder = &avroEncoder{schemaName: schemaName}
+	return p
+}
+
+// WithLogging enable or disable outgoing message logging
+func (p *PublisherImpl) WithLogging(logging bool) Publisher {
+	p.logging = logging
 	return p
 }
 
@@ -94,21 +102,23 @@ func (p *PublisherImpl) Publish(ctx context.Context, data interface{}, opts ...P
 		return str.Empty, err
 	}
 
+	pubsubFields := make(map[string]interface{})
+	pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
+	pubsubFields[constant.IsSubscriberFieldKey] = false
+	pubsubFields[constant.TopicIdFieldKey] = p.topic.ID()
+	pubsubFields[constant.MessageDataFieldKey] = string(message.Data)
+
 	result := p.topic.Publish(ctx, message)
 	// Block until the result is returned and
 	// a server-generated ID is returned for the published message.
 	serverId, err = result.Get(ctx)
 	if err != nil {
-		log.Error(ctx, err)
+		pubsubFields[constant.ErrorFieldKey] = err.Error()
+		log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Error()
+	} else {
+		pubsubFields[constant.MessageIdFieldKey] = serverId
+		log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
 	}
-
-	pubsubFields := make(map[string]interface{})
-	pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
-	pubsubFields[constant.IsSubscriberFieldKey] = false
-	pubsubFields[constant.TopicIdFieldKey] = p.topic.ID()
-	pubsubFields[constant.MessageIdFieldKey] = serverId
-	pubsubFields[constant.MessageDataFieldKey] = message
-	log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
 
 	return
 }
@@ -125,15 +135,27 @@ func batchPublish(ctx context.Context, wg *sync.WaitGroup, topic *pubsub.Topic, 
 	}
 	result := topic.Publish(ctx, message)
 	log.Tracef(ctx, "[Pub/Sub] Publish message, topicId=%s", topic.ID())
-	go func(res *pubsub.PublishResult) {
+	go func(topicId string, messageData []byte, res *pubsub.PublishResult) {
 		defer wg.Done()
+
+		pubsubFields := make(map[string]interface{})
+		pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
+		pubsubFields[constant.IsSubscriberFieldKey] = false
+		pubsubFields[constant.TopicIdFieldKey] = topicId
+		pubsubFields[constant.MessageDataFieldKey] = messageData
+
 		// The Get method blocks until a server-generated ID or
 		// an error is returned for the published message.
-		_, err := res.Get(ctx)
+		serverId, err := res.Get(ctx)
 		if err != nil {
 			errs = append(errs, err)
+			pubsubFields[constant.ErrorFieldKey] = err.Error()
+			log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Error()
+		} else {
+			pubsubFields[constant.MessageIdFieldKey] = serverId
+			log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
 		}
-	}(result)
+	}(topic.ID(), message.Data, result)
 
 	return errs
 }
@@ -148,9 +170,6 @@ func (p *PublisherImpl) BatchPublish(ctx context.Context, batchData []interface{
 	wg.Wait()
 
 	if len(errs) > integer.Zero {
-		for _, err := range errs {
-			log.Error(ctx, err)
-		}
 		return response.GeneralError
 	}
 	return nil

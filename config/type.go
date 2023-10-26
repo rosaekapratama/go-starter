@@ -50,6 +50,7 @@ type ClientConfig struct {
 }
 
 type RestClientConfig struct {
+	Logging            bool `yaml:"logging"`
 	Timeout            int  `yaml:"timeout"`
 	InsecureSkipVerify bool `yaml:"insecureSkipVerify"`
 }
@@ -61,15 +62,18 @@ type ServerConfig struct {
 }
 
 type RestServerConfig struct {
-	Port *HttpHttpsPortConfig `yaml:"port"`
+	Logging bool                 `yaml:"logging"`
+	Port    *HttpHttpsPortConfig `yaml:"port"`
 }
 
 type GrpcServerConfig struct {
-	Port *HttpHttpsPortConfig `yaml:"port"`
+	Logging bool                 `yaml:"logging"`
+	Port    *HttpHttpsPortConfig `yaml:"port"`
 }
 
 type GraphQLServerConfig struct {
-	Port *HttpHttpsPortConfig `yaml:"port"`
+	Logging bool                 `yaml:"logging"`
+	Port    *HttpHttpsPortConfig `yaml:"port"`
 }
 
 type HttpHttpsPortConfig struct {
@@ -278,11 +282,25 @@ type FirebaseMessagingConfig struct {
 }
 
 type GoogleCloudConfig struct {
+	Pubsub *GoogleCloudPubsubConfig `yaml:"pubsub"`
 	Oauth2 *GoogleCloudOauth2Config `yaml:"oauth2"`
 }
 
 type GoogleCloudOauth2Config struct {
 	Verification []*GoogleCloudOauth2VerificationConfig `yaml:"verification"`
+}
+
+type GoogleCloudPubsubConfig struct {
+	Publisher  *GoogleCloudPubsubPublisherConfig  `yaml:"publisher"`
+	Subscriber *GoogleCloudPubsubSubscriberConfig `yaml:"subscriber"`
+}
+
+type GoogleCloudPubsubPublisherConfig struct {
+	Logging bool `yaml:"logging"`
+}
+
+type GoogleCloudPubsubSubscriberConfig struct {
+	Logging bool `yaml:"logging"`
 }
 
 type GoogleCloudOauth2VerificationConfig struct {

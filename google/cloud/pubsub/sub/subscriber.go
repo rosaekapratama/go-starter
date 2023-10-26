@@ -4,6 +4,7 @@ import (
 	"cloud.google.com/go/pubsub"
 	"context"
 	"fmt"
+	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/constant/integer"
 	myContext "github.com/rosaekapratama/go-starter/context"
 	myPubsub "github.com/rosaekapratama/go-starter/google/cloud/pubsub"
@@ -55,6 +56,7 @@ func ReceiveWithState(subId string, state myPubsub.State, f func(ctx context.Con
 
 func receive(subId string, state myPubsub.State, f func(ctx context.Context, message *pubsub.Message, data interface{}), decoder Decoder, opts ...SubscriptionOption) {
 	ctx := context.Background()
+	cfg := config.Instance.GetObject().Google.Cloud.Pubsub.Subscriber
 
 	// Init subscription and apply subscription options
 	sub := client.Subscription(subId)
@@ -89,15 +91,17 @@ func receive(subId string, state myPubsub.State, f func(ctx context.Context, mes
 			messageState = v
 		}
 
-		// Logging incoming message
-		pubsubFields := make(map[string]interface{})
-		pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
-		pubsubFields[constant.IsSubscriberFieldKey] = true
-		pubsubFields[constant.SubscriberIdFieldKey] = subId
-		pubsubFields[constant.MessageIdFieldKey] = message.ID
-		pubsubFields[constant.MessageStateFieldKey] = messageState
-		pubsubFields[constant.MessageDataFieldKey] = string(message.Data)
-		log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
+		if cfg.Logging {
+			// Logging incoming message
+			pubsubFields := make(map[string]interface{})
+			pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
+			pubsubFields[constant.IsSubscriberFieldKey] = true
+			pubsubFields[constant.SubscriberIdFieldKey] = subId
+			pubsubFields[constant.MessageIdFieldKey] = message.ID
+			pubsubFields[constant.MessageStateFieldKey] = messageState
+			pubsubFields[constant.MessageDataFieldKey] = string(message.Data)
+			log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
+		}
 
 		if state != myPubsub.StateAny && string(state) != strings.ToLower(messageState) {
 			// Break cause not match
