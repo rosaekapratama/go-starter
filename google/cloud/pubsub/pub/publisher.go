@@ -4,6 +4,7 @@ import (
 	"cloud.google.com/go/pubsub"
 	"context"
 	"fmt"
+	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/constant/integer"
 	"github.com/rosaekapratama/go-starter/constant/location"
@@ -115,7 +116,7 @@ func (p *PublisherImpl) Publish(ctx context.Context, data interface{}, opts ...P
 	if err != nil {
 		pubsubFields[constant.ErrorFieldKey] = err.Error()
 		log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Error()
-	} else {
+	} else if p.logging {
 		pubsubFields[constant.MessageIdFieldKey] = serverId
 		log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
 	}
@@ -123,53 +124,25 @@ func (p *PublisherImpl) Publish(ctx context.Context, data interface{}, opts ...P
 	return
 }
 
-func batchPublish(ctx context.Context, wg *sync.WaitGroup, topic *pubsub.Topic, data interface{}, encoder Encoder, errs []error, opts ...PublishOption) []error {
-	ctx, span := myOtel.Trace(ctx, fmt.Sprintf(spanPublish, topic.ID()))
-	defer span.End()
-
-	wg.Add(integer.One)
-	message, err := initMessage(ctx, data, encoder, opts...)
-	if err != nil {
-		log.Error(ctx, err, "Failed to init pubsub message, topicId=%s", topic.ID())
-		return []error{err}
-	}
-	result := topic.Publish(ctx, message)
-	log.Tracef(ctx, "[Pub/Sub] Publish message, topicId=%s", topic.ID())
-	go func(topicId string, messageData []byte, res *pubsub.PublishResult) {
-		defer wg.Done()
-
-		pubsubFields := make(map[string]interface{})
-		pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
-		pubsubFields[constant.IsSubscriberFieldKey] = false
-		pubsubFields[constant.TopicIdFieldKey] = topicId
-		pubsubFields[constant.MessageDataFieldKey] = messageData
-
-		// The Get method blocks until a server-generated ID or
-		// an error is returned for the published message.
-		serverId, err := res.Get(ctx)
-		if err != nil {
-			errs = append(errs, err)
-			pubsubFields[constant.ErrorFieldKey] = err.Error()
-			log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Error()
-		} else {
-			pubsubFields[constant.MessageIdFieldKey] = serverId
-			log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
-		}
-	}(topic.ID(), message.Data, result)
-
-	return errs
-}
-
 func (p *PublisherImpl) BatchPublish(ctx context.Context, batchData []interface{}, opts ...PublishOption) error {
 	log.Tracef(ctx, "Batch publish data, topicId=%s, dataLen=%d", p.topic.ID(), len(batchData))
-	errs := make([]error, integer.Zero)
-	var wg *sync.WaitGroup
-	for _, data := range batchData {
-		errs = batchPublish(ctx, wg, p.topic, data, p.encoder, errs, opts...)
+	errs := cmap.New[bool]()
+	wg := &sync.WaitGroup{}
+	for i, data := range batchData {
+		wg.Add(integer.One)
+		traceParent := myContext.TraceParentFromContext(ctx)
+		newCtx := myContext.ContextWithTraceParent(context.Background(), traceParent)
+		go func(ctx context.Context, i int, wg *sync.WaitGroup, data interface{}, opts ...PublishOption) {
+			defer wg.Done()
+			_, err := p.Publish(ctx, data, opts...)
+			if err != nil {
+				errs.Set(strconv.Itoa(i), true)
+			}
+		}(newCtx, i, wg, data, opts...)
 	}
 	wg.Wait()
 
-	if len(errs) > integer.Zero {
+	if errs.Count() > integer.Zero {
 		return response.GeneralError
 	}
 	return nil
