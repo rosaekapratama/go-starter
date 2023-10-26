@@ -32,3 +32,6 @@ packages:
     interfaces:
       ILocker:
       ILock:
+  githubcom/rosaekapratama/go-starter/transport/restclient:
+    interfaces:
+      IManager:

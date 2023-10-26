@@ -5,7 +5,6 @@ package log
 import (
 	context "context"
 
-	log "github.com/rosaekapratama/go-starter/log"
 	logrus "github.com/sirupsen/logrus"
 
 	mock "github.com/stretchr/testify/mock"
@@ -1182,15 +1181,15 @@ func (_c *MockLogger_Warnln_Call) RunAndReturn(run func(context.Context, ...inte
 }
 
 // WithField provides a mock function with given fields: key, value
-func (_m *MockLogger) WithField(key string, value interface{}) log.Logger {
+func (_m *MockLogger) WithField(key string, value interface{}) Logger {
 	ret := _m.Called(key, value)
 
-	var r0 log.Logger
-	if rf, ok := ret.Get(0).(func(string, interface{}) log.Logger); ok {
+	var r0 Logger
+	if rf, ok := ret.Get(0).(func(string, interface{}) Logger); ok {
 		r0 = rf(key, value)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(log.Logger)
+			r0 = ret.Get(0).(Logger)
 		}
 	}
 
@@ -1216,26 +1215,26 @@ func (_c *MockLogger_WithField_Call) Run(run func(key string, value interface{})
 	return _c
 }
 
-func (_c *MockLogger_WithField_Call) Return(_a0 log.Logger) *MockLogger_WithField_Call {
+func (_c *MockLogger_WithField_Call) Return(_a0 Logger) *MockLogger_WithField_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *MockLogger_WithField_Call) RunAndReturn(run func(string, interface{}) log.Logger) *MockLogger_WithField_Call {
+func (_c *MockLogger_WithField_Call) RunAndReturn(run func(string, interface{}) Logger) *MockLogger_WithField_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // WithFields provides a mock function with given fields: fields
-func (_m *MockLogger) WithFields(fields map[string]interface{}) log.Logger {
+func (_m *MockLogger) WithFields(fields map[string]interface{}) Logger {
 	ret := _m.Called(fields)
 
-	var r0 log.Logger
-	if rf, ok := ret.Get(0).(func(map[string]interface{}) log.Logger); ok {
+	var r0 Logger
+	if rf, ok := ret.Get(0).(func(map[string]interface{}) Logger); ok {
 		r0 = rf(fields)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(log.Logger)
+			r0 = ret.Get(0).(Logger)
 		}
 	}
 
@@ -1260,26 +1259,26 @@ func (_c *MockLogger_WithFields_Call) Run(run func(fields map[string]interface{}
 	return _c
 }
 
-func (_c *MockLogger_WithFields_Call) Return(_a0 log.Logger) *MockLogger_WithFields_Call {
+func (_c *MockLogger_WithFields_Call) Return(_a0 Logger) *MockLogger_WithFields_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *MockLogger_WithFields_Call) RunAndReturn(run func(map[string]interface{}) log.Logger) *MockLogger_WithFields_Call {
+func (_c *MockLogger_WithFields_Call) RunAndReturn(run func(map[string]interface{}) Logger) *MockLogger_WithFields_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // WithTraceFields provides a mock function with given fields: ctx
-func (_m *MockLogger) WithTraceFields(ctx context.Context) log.Logger {
+func (_m *MockLogger) WithTraceFields(ctx context.Context) Logger {
 	ret := _m.Called(ctx)
 
-	var r0 log.Logger
-	if rf, ok := ret.Get(0).(func(context.Context) log.Logger); ok {
+	var r0 Logger
+	if rf, ok := ret.Get(0).(func(context.Context) Logger); ok {
 		r0 = rf(ctx)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(log.Logger)
+			r0 = ret.Get(0).(Logger)
 		}
 	}
 
@@ -1304,12 +1303,12 @@ func (_c *MockLogger_WithTraceFields_Call) Run(run func(ctx context.Context)) *M
 	return _c
 }
 
-func (_c *MockLogger_WithTraceFields_Call) Return(_a0 log.Logger) *MockLogger_WithTraceFields_Call {
+func (_c *MockLogger_WithTraceFields_Call) Return(_a0 Logger) *MockLogger_WithTraceFields_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *MockLogger_WithTraceFields_Call) RunAndReturn(run func(context.Context) log.Logger) *MockLogger_WithTraceFields_Call {
+func (_c *MockLogger_WithTraceFields_Call) RunAndReturn(run func(context.Context) Logger) *MockLogger_WithTraceFields_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -94,26 +94,62 @@ func Init(ctx context.Context, config config.Config) {
 
 func initSingleMode(ctx context.Context, cfg *config.RedisConfig) error {
 	singleConfig := cfg
-	Client = redis.NewClient(&redis.Options{
-		Network:         singleConfig.Network,
-		Addr:            singleConfig.Addr,
-		Username:        singleConfig.Username,
-		Password:        singleConfig.Password,
-		DB:              singleConfig.DB,
-		MaxRetries:      singleConfig.MaxRetries,
-		MinRetryBackoff: singleConfig.MinRetryBackoff.Duration,
-		MaxRetryBackoff: singleConfig.MaxRetryBackoff.Duration,
-		DialTimeout:     singleConfig.DialTimeout.Duration,
-		ReadTimeout:     singleConfig.ReadTimeout.Duration,
-		WriteTimeout:    singleConfig.WriteTimeout.Duration,
-		PoolFIFO:        singleConfig.PoolFIFO,
-		PoolSize:        singleConfig.PoolSize,
-		PoolTimeout:     singleConfig.PoolTimeout.Duration,
-		MinIdleConns:    singleConfig.MinIdleConns,
-		MaxIdleConns:    singleConfig.MaxIdleConns,
-		ConnMaxIdleTime: singleConfig.ConnMaxIdleTime.Duration,
-		ConnMaxLifetime: singleConfig.ConnMaxLifetime.Duration,
-	})
+	option := &redis.Options{
+		Addr: singleConfig.Addr,
+	}
+	if !utils.IsZeroValue(singleConfig.DB) {
+		option.DB = *singleConfig.DB
+	}
+	if !utils.IsZeroValue(singleConfig.Network) {
+		option.Network = *singleConfig.Network
+	}
+	if !utils.IsZeroValue(singleConfig.Username) {
+		option.Username = *singleConfig.Username
+	}
+	if !utils.IsZeroValue(singleConfig.Password) {
+		option.Password = *singleConfig.Password
+	}
+	if !utils.IsZeroValue(singleConfig.MaxRetries) {
+		option.MaxRetries = *singleConfig.MaxRetries
+	}
+	if !utils.IsZeroValue(singleConfig.MinRetryBackoff) {
+		option.MinRetryBackoff = singleConfig.MinRetryBackoff.Duration
+	}
+	if !utils.IsZeroValue(singleConfig.MaxRetryBackoff) {
+		option.MaxRetryBackoff = singleConfig.MaxRetryBackoff.Duration
+	}
+	if !utils.IsZeroValue(singleConfig.DialTimeout) {
+		option.DialTimeout = singleConfig.DialTimeout.Duration
+	}
+	if !utils.IsZeroValue(singleConfig.ReadTimeout) {
+		option.ReadTimeout = singleConfig.ReadTimeout.Duration
+	}
+	if !utils.IsZeroValue(singleConfig.WriteTimeout) {
+		option.WriteTimeout = singleConfig.WriteTimeout.Duration
+	}
+	if !utils.IsZeroValue(singleConfig.PoolFIFO) {
+		option.PoolFIFO = *singleConfig.PoolFIFO
+	}
+	if !utils.IsZeroValue(singleConfig.PoolSize) {
+		option.PoolSize = *singleConfig.PoolSize
+	}
+	if !utils.IsZeroValue(singleConfig.PoolTimeout) {
+		option.PoolTimeout = singleConfig.PoolTimeout.Duration
+	}
+	if !utils.IsZeroValue(singleConfig.MinIdleConns) {
+		option.MinIdleConns = *singleConfig.MinIdleConns
+	}
+	if !utils.IsZeroValue(singleConfig.MaxIdleConns) {
+		option.MaxIdleConns = *singleConfig.MaxIdleConns
+	}
+	if !utils.IsZeroValue(singleConfig.ConnMaxIdleTime) {
+		option.ConnMaxIdleTime = singleConfig.ConnMaxIdleTime.Duration
+	}
+	if !utils.IsZeroValue(singleConfig.ConnMaxLifetime) {
+		option.ConnMaxLifetime = singleConfig.ConnMaxLifetime.Duration
+	}
+
+	Client = redis.NewClient(option)
 	ping, err := Client.Ping(ctx).Result()
 	if err != nil {
 		log.Error(ctx, err, "Ping failed")
@@ -125,32 +161,78 @@ func initSingleMode(ctx context.Context, cfg *config.RedisConfig) error {
 
 func initSentinelMode(ctx context.Context, cfg *config.RedisConfig) error {
 	sentinelConfig := cfg
-	Client = redis.NewFailoverClusterClient(&redis.FailoverOptions{
-		MasterName:              sentinelConfig.MasterName,
-		SentinelAddrs:           sentinelConfig.SentinelAddrs,
-		SentinelUsername:        sentinelConfig.SentinelUsername,
-		SentinelPassword:        sentinelConfig.SentinelPassword,
-		RouteByLatency:          sentinelConfig.RouteByLatency,
-		RouteRandomly:           sentinelConfig.RouteRandomly,
-		ReplicaOnly:             sentinelConfig.ReplicaOnly,
-		UseDisconnectedReplicas: sentinelConfig.UseDisconnectedReplicas,
-		Username:                sentinelConfig.Username,
-		Password:                sentinelConfig.Password,
-		DB:                      sentinelConfig.DB,
-		MaxRetries:              sentinelConfig.MaxRetries,
-		MinRetryBackoff:         sentinelConfig.MinRetryBackoff.Duration,
-		MaxRetryBackoff:         sentinelConfig.MaxRetryBackoff.Duration,
-		DialTimeout:             sentinelConfig.DialTimeout.Duration,
-		ReadTimeout:             sentinelConfig.ReadTimeout.Duration,
-		WriteTimeout:            sentinelConfig.WriteTimeout.Duration,
-		PoolFIFO:                sentinelConfig.PoolFIFO,
-		PoolSize:                sentinelConfig.PoolSize,
-		PoolTimeout:             sentinelConfig.PoolTimeout.Duration,
-		MinIdleConns:            sentinelConfig.MinIdleConns,
-		MaxIdleConns:            sentinelConfig.MaxIdleConns,
-		ConnMaxIdleTime:         sentinelConfig.ConnMaxIdleTime.Duration,
-		ConnMaxLifetime:         sentinelConfig.ConnMaxLifetime.Duration,
-	})
+	option := &redis.FailoverOptions{
+		MasterName:    sentinelConfig.MasterName,
+		SentinelAddrs: sentinelConfig.SentinelAddrs,
+	}
+	if !utils.IsZeroValue(sentinelConfig.DB) {
+		option.DB = *sentinelConfig.DB
+	}
+	if !utils.IsZeroValue(sentinelConfig.Username) {
+		option.Username = *sentinelConfig.Username
+	}
+	if !utils.IsZeroValue(sentinelConfig.Password) {
+		option.Password = *sentinelConfig.Password
+	}
+	if !utils.IsZeroValue(sentinelConfig.MaxRetries) {
+		option.MaxRetries = *sentinelConfig.MaxRetries
+	}
+	if !utils.IsZeroValue(sentinelConfig.MinRetryBackoff) {
+		option.MinRetryBackoff = sentinelConfig.MinRetryBackoff.Duration
+	}
+	if !utils.IsZeroValue(sentinelConfig.MaxRetryBackoff) {
+		option.MaxRetryBackoff = sentinelConfig.MaxRetryBackoff.Duration
+	}
+	if !utils.IsZeroValue(sentinelConfig.DialTimeout) {
+		option.DialTimeout = sentinelConfig.DialTimeout.Duration
+	}
+	if !utils.IsZeroValue(sentinelConfig.ReadTimeout) {
+		option.ReadTimeout = sentinelConfig.ReadTimeout.Duration
+	}
+	if !utils.IsZeroValue(sentinelConfig.WriteTimeout) {
+		option.WriteTimeout = sentinelConfig.WriteTimeout.Duration
+	}
+	if !utils.IsZeroValue(sentinelConfig.PoolFIFO) {
+		option.PoolFIFO = *sentinelConfig.PoolFIFO
+	}
+	if !utils.IsZeroValue(sentinelConfig.PoolSize) {
+		option.PoolSize = *sentinelConfig.PoolSize
+	}
+	if !utils.IsZeroValue(sentinelConfig.PoolTimeout) {
+		option.PoolTimeout = sentinelConfig.PoolTimeout.Duration
+	}
+	if !utils.IsZeroValue(sentinelConfig.MinIdleConns) {
+		option.MinIdleConns = *sentinelConfig.MinIdleConns
+	}
+	if !utils.IsZeroValue(sentinelConfig.MaxIdleConns) {
+		option.MaxIdleConns = *sentinelConfig.MaxIdleConns
+	}
+	if !utils.IsZeroValue(sentinelConfig.ConnMaxIdleTime) {
+		option.ConnMaxIdleTime = sentinelConfig.ConnMaxIdleTime.Duration
+	}
+	if !utils.IsZeroValue(sentinelConfig.ConnMaxLifetime) {
+		option.ConnMaxLifetime = sentinelConfig.ConnMaxLifetime.Duration
+	}
+	if !utils.IsZeroValue(sentinelConfig.SentinelUsername) {
+		option.SentinelUsername = *sentinelConfig.SentinelUsername
+	}
+	if !utils.IsZeroValue(sentinelConfig.SentinelPassword) {
+		option.SentinelPassword = *sentinelConfig.SentinelPassword
+	}
+	if !utils.IsZeroValue(sentinelConfig.RouteByLatency) {
+		option.RouteByLatency = *sentinelConfig.RouteByLatency
+	}
+	if !utils.IsZeroValue(sentinelConfig.RouteRandomly) {
+		option.RouteRandomly = *sentinelConfig.RouteRandomly
+	}
+	if !utils.IsZeroValue(sentinelConfig.ReplicaOnly) {
+		option.ReplicaOnly = *sentinelConfig.ReplicaOnly
+	}
+	if !utils.IsZeroValue(sentinelConfig.UseDisconnectedReplicas) {
+		option.UseDisconnectedReplicas = *sentinelConfig.UseDisconnectedReplicas
+	}
+
+	Client = redis.NewFailoverClusterClient(option)
 	ping, err := Client.Ping(ctx).Result()
 	if err != nil {
 		log.Error(ctx, err, "Ping failed")

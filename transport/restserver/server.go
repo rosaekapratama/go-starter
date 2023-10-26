@@ -1,4 +1,4 @@
-package server
+package restserver
 
 import (
 	"github.com/rosaekapratama/go-starter/constant/integer"

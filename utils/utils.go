@@ -8,6 +8,7 @@ import (
 	"github.com/rosaekapratama/go-starter/log"
 	"math/rand"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -241,4 +242,16 @@ func IsRunLocally(ctx context.Context) bool {
 	}
 
 	return false
+}
+
+func IsZeroValue(v interface{}) bool {
+	val := reflect.ValueOf(v)
+	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return true
+		}
+		val = val.Elem()
+	}
+	zeroValue := reflect.Zero(val.Type()).Interface()
+	return reflect.DeepEqual(val.Interface(), zeroValue)
 }

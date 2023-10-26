@@ -1,4 +1,4 @@
-package server
+package restserver
 
 import (
 	"context"
@@ -26,13 +26,13 @@ import (
 	"github.com/rosaekapratama/go-starter/healthcheck"
 	"github.com/rosaekapratama/go-starter/keycloak"
 	"github.com/rosaekapratama/go-starter/log"
-	"github.com/rosaekapratama/go-starter/log/formatter/gcp"
 	"github.com/rosaekapratama/go-starter/loginit"
 	"github.com/rosaekapratama/go-starter/mocks"
 	myOtel "github.com/rosaekapratama/go-starter/otel"
 	"github.com/rosaekapratama/go-starter/redis"
 	"github.com/rosaekapratama/go-starter/response"
-	"github.com/rosaekapratama/go-starter/transport/rest/client"
+	"github.com/rosaekapratama/go-starter/transport/constant"
+	"github.com/rosaekapratama/go-starter/transport/restclient"
 	"github.com/rosaekapratama/go-starter/zeebe"
 	"github.com/stretchr/testify/mock"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
@@ -41,7 +41,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -55,6 +54,40 @@ var (
 	propagator = otel.GetTextMapPropagator()
 	Router     *gin.Engine
 )
+
+func logging(c *gin.Context) {
+	r := c.Request
+	httpFields := make(map[string]interface{})
+	httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
+	httpFields[constant.UrlFieldKey] = r.URL
+	httpFields[constant.MethodFieldKey] = r.Method
+	httpFields[constant.IsServerFieldKey] = true
+	httpFields[constant.IsRequestFieldKey] = true
+	httpFields[constant.HeadersFieldKey] = r.Header
+	if r.MultipartForm != nil {
+		httpFields[constant.FormDataFieldKey] = r.MultipartForm
+	}
+	if r.Body != nil {
+		httpFields[constant.BodyFieldKey] = r.Body
+	}
+	log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
+
+	c.Next()
+
+	i := c.Writer.(*WriterInterceptor)
+	httpFields = make(map[string]interface{})
+	httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
+	httpFields[constant.UrlFieldKey] = r.URL
+	httpFields[constant.MethodFieldKey] = r.Method
+	httpFields[constant.IsServerFieldKey] = true
+	httpFields[constant.IsRequestFieldKey] = false
+	httpFields[constant.StatusCodeFieldKey] = i.status
+	httpFields[constant.HeadersFieldKey] = i.ResponseWriter.Header()
+	if len(i.body) > integer.Zero {
+		httpFields[constant.BodyFieldKey] = string(i.body)
+	}
+	log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
+}
 
 func enableCors() gin.HandlerFunc {
 	ctx := context.Background()
@@ -135,63 +168,6 @@ func interceptResponse(c *gin.Context) {
 			log.Error(r.Context(), err)
 		}
 	}
-}
-
-func logger() gin.HandlerFunc {
-	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
-		// Skip if request is health check
-		isHealthCheck, err := regexp.MatchString(healthcheck.URLPathRegex, param.Path)
-		if err != nil {
-			log.Error(param.Request.Context(), err)
-			return err.Error()
-		}
-		if isHealthCheck && param.Method == http.MethodGet {
-			return str.Empty
-		}
-
-		// Start middleware logic
-		ctx := param.Request.Context()
-		projectId := google.Manager.GetCredentials().ProjectID
-		ginLog, err := json.Marshal(&gcp.Layout{
-			Timestamp: param.TimeStamp.Format(time.RFC3339),
-			Severity:  string(gcp.Info),
-			Message:   param.ErrorMessage,
-			HttpRequest: &gcp.HttpRequest{
-				RequestMethod:                  param.Method,
-				RequestUrl:                     param.Path,
-				RequestSize:                    strconv.FormatInt(param.Request.ContentLength, integer.Ten),
-				Status:                         param.StatusCode,
-				ResponseSize:                   "",
-				UserAgent:                      param.Request.UserAgent(),
-				RemoteIp:                       param.ClientIP,
-				ServerIp:                       "",
-				Referer:                        "",
-				Latency:                        fmt.Sprintf("%s", param.Latency),
-				CacheLookup:                    false,
-				CacheHit:                       false,
-				CacheValidatedWithOriginServer: false,
-				CacheFillBytes:                 "",
-				Protocol:                       param.Request.Proto,
-			},
-			LoggingGoogleapisComSpanID: gcp.DefaultSpanID,
-			LoggingGoogleapisComTrace:  fmt.Sprintf(gcp.TraceFormat, projectId, gcp.DefaultTraceID),
-		})
-		if err != nil {
-			log.Warn(ctx, err, "Failed to marshal gin log")
-			return fmt.Sprintf("%s - [%s] \"%s %s %s %d %s \"%s\" %s\"\n",
-				param.ClientIP,
-				param.TimeStamp.Format(time.RFC1123),
-				param.Method,
-				param.Path,
-				param.Request.Proto,
-				param.StatusCode,
-				param.Latency,
-				param.Request.UserAgent(),
-				param.ErrorMessage,
-			)
-		}
-		return string(ginLog) + str.NewLine
-	})
 }
 
 func injectTraceParent(c *gin.Context) {
@@ -415,7 +391,7 @@ func initRun(ctx context.Context) {
 	redis.Init(ctx, config)
 
 	// Init http client package
-	client.Init(config)
+	restclient.Init(ctx, config)
 
 	// Init zeebe package
 	zeebe.Init(ctx, config)
@@ -426,10 +402,10 @@ func initRun(ctx context.Context) {
 
 	// List of mandatory middleware
 	Router.Use(
+		logging,
 		enableCors(),
 		extractTraceParent,
 		interceptResponse,
-		logger(),
 		gin.Recovery(),
 		otelgin.Middleware(cfg.App.Name),
 		injectTraceParent,

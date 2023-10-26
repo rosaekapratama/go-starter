@@ -2,23 +2,27 @@ package oauth
 
 import (
 	"context"
+	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/log"
 	mocksConfig "github.com/rosaekapratama/go-starter/mocks/config"
 	mocksLog "github.com/rosaekapratama/go-starter/mocks/log"
-	"github.com/rosaekapratama/go-starter/transport/rest/client"
+	mocksRestClient "github.com/rosaekapratama/go-starter/mocks/transport/restclient"
+	"github.com/rosaekapratama/go-starter/transport/restclient"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"testing"
 )
 
 var (
-	ctx           context.Context
-	oriLog        log.Logger
-	mockLog       *mocksLog.MockLogger
-	mockConfig    *mocksConfig.MockConfig
-	oriHttpClient = client.GetDefaultClient()
+	ctx         context.Context
+	oriLog      log.Logger
+	mockLog     *mocksLog.MockLogger
+	mockConfig  *mocksConfig.MockConfig
+	oriManager  restclient.IManager
+	mockManager *mocksRestClient.MockIManager
+	client      *restclient.Client
 )
 
 type OAuthTestSuite struct {
@@ -27,10 +31,12 @@ type OAuthTestSuite struct {
 
 func (s *OAuthTestSuite) SetupSuite() {
 	oriLog = log.GetLogger()
+	oriManager = restclient.Manager
 }
 
 func (s *OAuthTestSuite) TearDownSuite() {
 	log.SetLogger(oriLog)
+	restclient.Manager = oriManager
 }
 
 func (s *OAuthTestSuite) SetupTest() {
@@ -52,10 +58,17 @@ func (s *OAuthTestSuite) SetupTest() {
 			},
 		},
 	)
-	client.Init(mockConfig)
-	httpClient = client.New()
+
+	// Replace manager with mock
+	mockManager = &mocksRestClient.MockIManager{}
+	restclient.Manager = mockManager
+
+	// Replace default client with mock
+	client = &restclient.Client{Resty: resty.New()}
+	mockManager.On("GetDefaultClient").Return(client)
+
 	// block all HTTP requests
-	httpmock.ActivateNonDefault(httpClient.Resty.GetClient())
+	httpmock.ActivateNonDefault(client.Resty.GetClient())
 }
 
 func (s *OAuthTestSuite) TearDownTest() {

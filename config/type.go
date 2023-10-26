@@ -50,6 +50,7 @@ type ClientConfig struct {
 }
 
 type RestClientConfig struct {
+	Timeout            int  `yaml:"timeout"`
 	InsecureSkipVerify bool `yaml:"insecureSkipVerify"`
 }
 
@@ -116,64 +117,64 @@ type RedisConfig struct {
 type RedisSingleConfig struct {
 	// The network type, either tcp or unix.
 	// Default is tcp.
-	Network string `yaml:"network"`
+	Network *string `yaml:"network"`
 	// host:port address.
 	Addr string `yaml:"addr"`
 	// Use the specified Username to authenticate the current connection
 	// with one of the connections defined in the ACL list when connecting
 	// to a Redis 6.0 instance, or greater, that is using the Redis ACL system.
-	Username string `yaml:"username"`
+	Username *string `yaml:"username"`
 	// Optional password. Must match the password specified in the
 	// requirepass server configuration option (if connecting to a Redis 5.0 instance, or lower),
 	// or the User Password when connecting to a Redis 6.0 instance, or greater,
 	// that is using the Redis ACL system.
-	Password string `yaml:"password"`
+	Password *string `yaml:"password"`
 	// Database to be selected after connecting to the server.
-	DB int `yaml:"db"`
+	DB *int `yaml:"db"`
 	// Maximum number of retries before giving up.
 	// Default is 3 retries; -1 (not 0) disables retries.
-	MaxRetries int `yaml:"maxRetries"`
+	MaxRetries *int `yaml:"maxRetries"`
 	// Minimum backoff between each retry.
 	// Default is 8 milliseconds; -1 disables backoff.
-	MinRetryBackoff yaml.Duration `yaml:"minRetryBackoff"`
+	MinRetryBackoff *yaml.Duration `yaml:"minRetryBackoff"`
 	// Maximum backoff between each retry.
 	// Default is 512 milliseconds; -1 disables backoff.
-	MaxRetryBackoff yaml.Duration `yaml:"maxRetryBackoff"`
+	MaxRetryBackoff *yaml.Duration `yaml:"maxRetryBackoff"`
 	// Dial timeout for establishing new connections.
 	// Default is 5 seconds.
-	DialTimeout yaml.Duration `yaml:"dialTimeout"`
+	DialTimeout *yaml.Duration `yaml:"dialTimeout"`
 	// Timeout for socket reads. If reached, commands will fail
 	// with a timeout instead of blocking. Use value -1 for no timeout and 0 for default.
 	// Default is 3 seconds.
-	ReadTimeout yaml.Duration `yaml:"readTimeout"`
+	ReadTimeout *yaml.Duration `yaml:"readTimeout"`
 	// Timeout for socket writes. If reached, commands will fail
 	// with a timeout instead of blocking.
 	// Default is ReadTimeout.
-	WriteTimeout yaml.Duration `yaml:"writeTimeout"`
+	WriteTimeout *yaml.Duration `yaml:"writeTimeout"`
 
 	// Type of connection pool.
 	// true for FIFO pool, false for LIFO pool.
 	// Note that fifo has higher overhead compared to lifo.
-	PoolFIFO bool `yaml:"poolFIFO"`
+	PoolFIFO *bool `yaml:"poolFIFO"`
 	// Maximum number of socket connections.
 	// Default is 10 connections per every available CPU as reported by runtime.GOMAXPROCS.
-	PoolSize int `yaml:"poolSize"`
+	PoolSize *int `yaml:"poolSize"`
 	// Amount of time client waits for connection if all connections
 	// are busy before returning an error.
 	// Default is ReadTimeout + 1 second.
-	PoolTimeout yaml.Duration `yaml:"poolTimeout"`
+	PoolTimeout *yaml.Duration `yaml:"poolTimeout"`
 	// Minimum number of idle connections which is useful when establishing
 	// new connection is slow.
-	MinIdleConns int `yaml:"minIdleConns"`
+	MinIdleConns *int `yaml:"minIdleConns"`
 	// Maximum number of idle connections.
-	MaxIdleConns int `yaml:"maxIdleConns"`
+	MaxIdleConns *int `yaml:"maxIdleConns"`
 	// Amount of time after which client closes idle connections.
 	// Should be less than server's timeout.
 	// Default is 5 minutes. -1 disables idle timeout check.
-	ConnMaxIdleTime yaml.Duration `yaml:"connMaxIdleTime"`
+	ConnMaxIdleTime *yaml.Duration `yaml:"connMaxIdleTime"`
 	// Connection age at which client retires (closes) the connection.
 	// Default is to not close aged connections.
-	ConnMaxLifetime yaml.Duration `yaml:"connMaxLifetime"`
+	ConnMaxLifetime *yaml.Duration `yaml:"connMaxLifetime"`
 }
 
 type RedisSentinelConfig struct {
@@ -184,25 +185,25 @@ type RedisSentinelConfig struct {
 
 	// If specified with SentinelPassword, enables ACL-based authentication (via
 	// AUTH <user> <pass>).
-	SentinelUsername string `yaml:"sentinelUsername"`
+	SentinelUsername *string `yaml:"sentinelUsername"`
 	// Sentinel password from "requirepass <password>" (if enabled) in Sentinel
 	// configuration, or, if SentinelUsername is also supplied, used for ACL-based
 	// authentication.
-	SentinelPassword string `yaml:"sentinelPassword"`
+	SentinelPassword *string `yaml:"sentinelPassword"`
 
 	// Allows routing read-only commands to the closest master or replica node.
 	// This option only works with NewFailoverClusterClient.
-	RouteByLatency bool `yaml:"routeByLatency"`
+	RouteByLatency *bool `yaml:"routeByLatency"`
 	// Allows routing read-only commands to the random master or replica node.
 	// This option only works with NewFailoverClusterClient.
-	RouteRandomly bool `yaml:"routeRandomly"`
+	RouteRandomly *bool `yaml:"routeRandomly"`
 
 	// Route all commands to replica read-only nodes.
-	ReplicaOnly bool `yaml:"replicaOnly"`
+	ReplicaOnly *bool `yaml:"replicaOnly"`
 
 	// Use replicas disconnected with master when cannot get connected replicas
 	// Now, this option only works in RandomReplicaAddr function.
-	UseDisconnectedReplicas bool `yaml:"useDisconnectedReplicas"`
+	UseDisconnectedReplicas *bool `yaml:"useDisconnectedReplicas"`
 
 	// Following options are copied from Options struct.
 	RedisSingleConfig

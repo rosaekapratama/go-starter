@@ -1,4 +1,4 @@
-package server
+package restserver
 
 import (
 	"bufio"
@@ -49,6 +49,7 @@ type WriterInterceptor struct {
 	ctx       context.Context
 	response  response.IResponse
 	page      *page.PageResponse
+	body      []byte
 	IsWritten bool
 	IsRaw     bool
 	a         []any
@@ -65,18 +66,20 @@ func (w *WriterInterceptor) reset(writer http.ResponseWriter) {
 // WriteHeader wrapper func of http.ResponseWriter WriteHeader
 func (w *WriterInterceptor) WriteHeader(statusCode int) {
 	if w.response != nil && w.response.HttpStatusCode() > integer.Zero {
-		w.ResponseWriter.WriteHeader(w.response.HttpStatusCode())
+		w.status = w.response.HttpStatusCode()
 	} else {
-		w.ResponseWriter.WriteHeader(statusCode)
+		w.status = statusCode
 	}
+	w.ResponseWriter.WriteHeader(w.status)
 }
 
 func (w *WriterInterceptor) WriteHeaderNow() {
 	if w.response != nil && w.response.HttpStatusCode() > integer.Zero {
-		w.ResponseWriter.WriteHeader(w.response.HttpStatusCode())
+		w.status = w.response.HttpStatusCode()
 	} else {
-		w.ResponseWriter.WriteHeader(response.Success.HttpStatusCode())
+		w.status = response.Success.HttpStatusCode()
 	}
+	w.ResponseWriter.WriteHeader(w.status)
 }
 
 // Write wrapper func of http.ResponseWriter Write
@@ -143,6 +146,7 @@ func (w *WriterInterceptor) Write(b []byte) (int, error) {
 	w.IsWritten = true
 	w.size = realLen
 	w.status = w.response.HttpStatusCode()
+	w.body = rb
 	w.ResponseWriter.WriteHeader(w.response.HttpStatusCode())
 	_, err = w.ResponseWriter.Write(rb)
 	w.Header().Set(headers.ContentLength, strconv.Itoa(realLen))
@@ -196,7 +200,7 @@ func (w *WriterInterceptor) Pusher() (pusher http.Pusher) {
 }
 
 func NewWriterInterceptor(ctx context.Context, w http.ResponseWriter) *WriterInterceptor {
-	return &WriterInterceptor{w, integer.NOne, integer.Zero, ctx, nil, nil, false, false, nil}
+	return &WriterInterceptor{w, integer.NOne, integer.Zero, ctx, nil, nil, nil, false, false, nil}
 }
 
 func (r *BaseResponse) setResponse(i *WriterInterceptor) error {

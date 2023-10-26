@@ -33,6 +33,9 @@ type Logger interface {
 
 	GetLevel() logrus.Level
 	GetLogrusLogger() logrus.Ext1FieldLogger
+	WithField(key string, value interface{}) Logger
+	WithFields(fields map[string]interface{}) Logger
+	WithTraceFields(ctx context.Context) Logger
 }
 
 type LoggerImpl struct {

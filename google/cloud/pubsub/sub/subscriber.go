@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"github.com/rosaekapratama/go-starter/constant/integer"
 	myContext "github.com/rosaekapratama/go-starter/context"
-	pubsub2 "github.com/rosaekapratama/go-starter/google/cloud/pubsub"
+	myPubsub "github.com/rosaekapratama/go-starter/google/cloud/pubsub"
+	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/constant"
 	"github.com/rosaekapratama/go-starter/log"
 	"github.com/rosaekapratama/go-starter/otel"
 	"github.com/rosaekapratama/go-starter/response"
@@ -44,15 +45,15 @@ type Subscriber struct {
 //	}
 func Receive(subId string, f func(ctx context.Context, message *pubsub.Message, data interface{}), decoder Decoder, opts ...SubscriptionOption) {
 	wg.Add(integer.One)
-	go receive(subId, pubsub2.StateAny, f, decoder, opts...)
+	go receive(subId, myPubsub.StateAny, f, decoder, opts...)
 }
 
-func ReceiveWithState(subId string, state pubsub2.State, f func(ctx context.Context, message *pubsub.Message, data interface{}), decoder Decoder, opts ...SubscriptionOption) {
+func ReceiveWithState(subId string, state myPubsub.State, f func(ctx context.Context, message *pubsub.Message, data interface{}), decoder Decoder, opts ...SubscriptionOption) {
 	wg.Add(integer.One)
 	go receive(subId, state, f, decoder, opts...)
 }
 
-func receive(subId string, state pubsub2.State, f func(ctx context.Context, message *pubsub.Message, data interface{}), decoder Decoder, opts ...SubscriptionOption) {
+func receive(subId string, state myPubsub.State, f func(ctx context.Context, message *pubsub.Message, data interface{}), decoder Decoder, opts ...SubscriptionOption) {
 	ctx := context.Background()
 
 	// Init subscription and apply subscription options
@@ -78,23 +79,32 @@ func receive(subId string, state pubsub2.State, f func(ctx context.Context, mess
 	// Run subscription.Receive function to receive data from pubsub
 	err = sub.Receive(ctx, func(ctx context.Context, message *pubsub.Message) {
 		// Add traceparent to pubsub message attributes
-		ctx = myContext.ContextWithTraceParent(ctx, message.Attributes[pubsub2.TraceparentAttrKey])
+		ctx = myContext.ContextWithTraceParent(ctx, message.Attributes[myPubsub.TraceparentAttrKey])
 		ctx, span := otel.Trace(ctx, fmt.Sprintf(spanSubscriber, subId))
 		defer span.End()
 
 		// If state matches, then continue, or break if not matches
 		var messageState string
-		if v, ok := message.Attributes[pubsub2.StateAttrKey]; ok {
+		if v, ok := message.Attributes[myPubsub.StateAttrKey]; ok {
 			messageState = v
 		}
-		if state != pubsub2.StateAny && string(state) != strings.ToLower(messageState) {
+
+		// Logging incoming message
+		pubsubFields := make(map[string]interface{})
+		pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
+		pubsubFields[constant.IsSubscriberFieldKey] = true
+		pubsubFields[constant.SubscriberIdFieldKey] = subId
+		pubsubFields[constant.MessageIdFieldKey] = message.ID
+		pubsubFields[constant.MessageStateFieldKey] = messageState
+		pubsubFields[constant.MessageDataFieldKey] = string(message.Data)
+		log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
+
+		if state != myPubsub.StateAny && string(state) != strings.ToLower(messageState) {
 			// Break cause not match
 			log.Tracef(ctx, "State doesn't match, subId=%s, subState=%s, msgState=%s", subId, state, messageState)
 			message.Ack()
 			return
 		}
-
-		log.Tracef(ctx, "[Pub/Sub] Incoming message, subId=%s, messageId=%s", subId, message.ID)
 
 		// Decode message if decoder not nil
 		if decoder != nil {
@@ -116,7 +126,7 @@ func receive(subId string, state pubsub2.State, f func(ctx context.Context, mess
 
 // GetOriginPublishTimeFromMessage return nil if publish time attribute not found
 func GetOriginPublishTimeFromMessage(ctx context.Context, msg *pubsub.Message) (*time.Time, error) {
-	if v, ok := msg.Attributes[pubsub2.OriginPublishTimeAttrKey]; ok {
+	if v, ok := msg.Attributes[myPubsub.OriginPublishTimeAttrKey]; ok {
 		publishTime, err := time.Parse(time.RFC3339, v)
 		if err != nil {
 			log.Errorf(ctx, err, "Failed to parse origin publish time string, publishTime=%s", v)

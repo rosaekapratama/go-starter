@@ -2,9 +2,8 @@ package log
 
 import (
 	"context"
-	config "github.com/rosaekapratama/go-starter/config"
+	"github.com/rosaekapratama/go-starter/config"
 	mocksConfig "github.com/rosaekapratama/go-starter/mocks/config"
-	mocksLog "github.com/rosaekapratama/go-starter/mocks/log"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"testing"
@@ -13,7 +12,7 @@ import (
 var (
 	ctx        context.Context
 	oriLog     Logger
-	mockLog    *mocksLog.MockLogger
+	mockLog    *MockLogger
 	mockConfig *mocksConfig.MockConfig
 )
 
@@ -31,7 +30,7 @@ func (s *LogTestSuite) TearDownSuite() {
 
 func (s *LogTestSuite) SetupTest() {
 	// Replace logger with mock
-	mockLog = &mocksLog.MockLogger{}
+	mockLog = &MockLogger{}
 	logger = mockLog
 
 	// Init all object

@@ -7,7 +7,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/rosaekapratama/go-starter/log"
 	"github.com/rosaekapratama/go-starter/otel"
-	"github.com/rosaekapratama/go-starter/transport/rest/client"
+	"github.com/rosaekapratama/go-starter/transport/restclient"
 )
 
 const (
@@ -17,16 +17,12 @@ const (
 	tokeninfoEndpoint = "https://oauth2.googleapis.com/tokeninfo?id_token=%s"
 )
 
-var (
-	httpClient = client.GetDefaultClient()
-)
-
 func (c *ClientImpl) VerifyToken(ctx context.Context, token string) (response *InfotokenResponse, err error) {
 	ctx, span := otel.Trace(ctx, spanVerifyToken)
 	defer span.End()
 
 	var res *resty.Response
-	req := httpClient.NewRequest(ctx)
+	req := restclient.Manager.GetDefaultClient().NewRequest(ctx)
 	res, err = req.Get(fmt.Sprintf(c.tokeninfoEndpoint, token))
 	if err != nil {
 		log.Error(ctx, err, errFailedToGetTokenInfo)

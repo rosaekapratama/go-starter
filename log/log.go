@@ -108,22 +108,34 @@ func SetLogger(newLogger Logger) {
 	logger = newLogger
 }
 
-// StdEntries Return entries with trace ID entry from span context,
-// span ID entry from span context, and
-// span parent ID entry from context
-func stdEntries(ctx context.Context, logger logrus.Ext1FieldLogger) *logrus.Entry {
+func addTraceEntries(ctx context.Context, logger logrus.Ext1FieldLogger) logrus.Ext1FieldLogger {
 	sc := trace.SpanContextFromContext(ctx)
-	entry := logger.
+	newLogger := logger.
 		WithField(constant.TraceIdKey, sc.TraceID().String()).
 		WithField(constant.SpanIdKey, sc.SpanID().String()).
 		WithField(constant.SpanParentIdKey, ctx.Value(constant.SpanParentIdKey))
+	return newLogger
+}
+
+func addCallerEntries(logger logrus.Ext1FieldLogger) logrus.Ext1FieldLogger {
+	newLogger := logger
 	if pc, file, line, ok := runtime.Caller(2); ok {
-		entry = entry.
+		newLogger.
 			WithField(constant.CallerFileKey, file).
 			WithField(constant.CallerFuncKey, runtime.FuncForPC(pc).Name()).
 			WithField(constant.CallerLineKey, line)
+		return newLogger
 	}
-	return entry
+	return newLogger
+}
+
+// StdEntries Return entries with trace ID entry from span context,
+// span ID entry from span context, and
+// span parent ID entry from context
+func stdEntries(ctx context.Context, logger logrus.Ext1FieldLogger) logrus.Ext1FieldLogger {
+	logger = addTraceEntries(ctx, logger)
+	logger = addCallerEntries(logger)
+	return logger
 }
 
 func (logger *LoggerImpl) Trace(ctx context.Context, args ...interface{}) {
@@ -266,6 +278,18 @@ func (logger *LoggerImpl) GetLogrusLogger() logrus.Ext1FieldLogger {
 	return logger.logger
 }
 
+func (logger *LoggerImpl) WithField(key string, value interface{}) Logger {
+	return &LoggerImpl{logger: logger.logger.WithField(key, value)}
+}
+
+func (logger *LoggerImpl) WithFields(fields map[string]interface{}) Logger {
+	return &LoggerImpl{logger: logger.logger.WithFields(fields)}
+}
+
+func (logger *LoggerImpl) WithTraceFields(ctx context.Context) Logger {
+	return &LoggerImpl{logger: addTraceEntries(ctx, logger.logger)}
+}
+
 func Trace(ctx context.Context, args ...interface{}) {
 	logger.Trace(ctx, args...)
 }
@@ -360,6 +384,26 @@ func Panicf(ctx context.Context, err error, format string, args ...interface{}) 
 
 func Panicln(ctx context.Context, err error, args ...interface{}) {
 	logger.Panicln(ctx, err, args...)
+}
+
+func GetLevel() logrus.Level {
+	return logger.GetLevel()
+}
+
+func GetLogrusLogger() logrus.Ext1FieldLogger {
+	return logger.GetLogrusLogger()
+}
+
+func WithField(key string, value interface{}) Logger {
+	return logger.WithField(key, value)
+}
+
+func WithFields(fields map[string]interface{}) Logger {
+	return logger.WithFields(fields)
+}
+
+func WithTraceFields(ctx context.Context) Logger {
+	return logger.WithTraceFields(ctx)
 }
 
 func isRunLocally(logger logrus.FieldLogger) bool {

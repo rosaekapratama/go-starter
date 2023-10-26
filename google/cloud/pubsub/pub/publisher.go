@@ -8,7 +8,8 @@ import (
 	"github.com/rosaekapratama/go-starter/constant/location"
 	"github.com/rosaekapratama/go-starter/constant/str"
 	myContext "github.com/rosaekapratama/go-starter/context"
-	pubsub2 "github.com/rosaekapratama/go-starter/google/cloud/pubsub"
+	myPubsub "github.com/rosaekapratama/go-starter/google/cloud/pubsub"
+	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/constant"
 	"github.com/rosaekapratama/go-starter/log"
 	myOtel "github.com/rosaekapratama/go-starter/otel"
 	"github.com/rosaekapratama/go-starter/response"
@@ -46,12 +47,12 @@ func (p *PublisherImpl) WithAvroEncoder(schemaName string) Publisher {
 func initMessage(ctx context.Context, data interface{}, encoder Encoder, opts ...PublishOption) (*pubsub.Message, error) {
 	message := &pubsub.Message{
 		Attributes: map[string]string{
-			pubsub2.TraceparentAttrKey:       myContext.TraceParentFromContext(ctx),
-			pubsub2.OriginPublishTimeAttrKey: time.Now().In(location.AsiaJakarta).Format(time.RFC3339),
+			myPubsub.TraceparentAttrKey:       myContext.TraceParentFromContext(ctx),
+			myPubsub.OriginPublishTimeAttrKey: time.Now().In(location.AsiaJakarta).Format(time.RFC3339),
 		},
 	}
 
-	// Apply publish option
+	// Apply options
 	if nil != opts {
 		for _, opt := range opts {
 			opt.Apply(message)
@@ -94,13 +95,21 @@ func (p *PublisherImpl) Publish(ctx context.Context, data interface{}, opts ...P
 	}
 
 	result := p.topic.Publish(ctx, message)
-	log.Tracef(ctx, "[Pub/Sub] Publish message, topicId=%s", p.topic.ID())
 	// Block until the result is returned and
 	// a server-generated ID is returned for the published message.
 	serverId, err = result.Get(ctx)
 	if err != nil {
 		log.Error(ctx, err)
 	}
+
+	pubsubFields := make(map[string]interface{})
+	pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
+	pubsubFields[constant.IsSubscriberFieldKey] = false
+	pubsubFields[constant.TopicIdFieldKey] = p.topic.ID()
+	pubsubFields[constant.MessageIdFieldKey] = serverId
+	pubsubFields[constant.MessageDataFieldKey] = message
+	log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
+
 	return
 }
 

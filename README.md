@@ -1,4 +1,4 @@
-# Go Boot #
+# Go Common GG #
 
 Auto configuration and collection of modules for Go REST services powered by Gin web framework and GORM.
 
@@ -26,6 +26,7 @@ app:
 transport:
   client:
     rest:
+      timeout: 30 # Wait time in second
       insecureSkipVerify: false
   server:
     rest:
@@ -92,6 +93,29 @@ redis:
   password: ''
   db: 0
   disabled: false # If true then redis init will be skipped
+  
+  # Other config
+  network: 'tcp' # TCP/UNIX, default is TCP
+  username: ''
+  maxRetries: 3 # -1 (not 0) disables retries. 
+  minRetryBackoff: 8 # In milliseconds
+  maxRetryBackoff: 512 # In milliseconds
+  dialTimeout: 5 # In seconds
+  readTimeout: 3 # In seconds
+  writeTimeout: 3 # Default is readTimeout in seconds
+  poolFIFO: false
+  poolSize: 10
+  PoolTimeout: 4 # Default is readTimeout + 1 second
+  minIdleConns: 10
+  maxIdleConns: 10
+  connMaxIdleTime: 300 # In seconds, default is 5 minutes. -1 disables idle timeout check
+  connMaxLifetime: -1
+  
+  # Other sentinel config
+  routeByLatency: true
+  routeRandomly: false
+  replicaOnly: false
+  useDisconnectedReplicas: false
 
 database:
   - id: pgsql1
@@ -138,7 +162,7 @@ otel:
       otlp:
         grpc:
           address: localhost:4317
-          timeout: 5 # Otel collector onnection timeout in second
+          timeout: 5 # Otel collector onnection timeout in seconds
           clientMaxReceiveMessageSize: 4MB # Must have bytesize suffix, such as B, KB, MB, GB
       disabled: false
   metric:
@@ -148,7 +172,7 @@ otel:
       otlp:
         grpc:
           address: localhost:4317
-          timeout: 5 # Otel collector onnection timeout in second
+          timeout: 5 # Otel collector onnection timeout in seconds
           clientMaxReceiveMessageSize: 4MB # Must have bytesize suffix, such as B, KB, MB, GB
       disabled: false
   disabled: false # If true then otel init will be skipped
