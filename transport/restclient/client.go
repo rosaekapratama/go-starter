@@ -7,12 +7,10 @@ import (
 	"github.com/rosaekapratama/go-starter/constant/headers"
 	"github.com/rosaekapratama/go-starter/constant/headers/contenttype"
 	"github.com/rosaekapratama/go-starter/constant/integer"
-	"github.com/rosaekapratama/go-starter/healthcheck"
 	"github.com/rosaekapratama/go-starter/log"
 	"github.com/rosaekapratama/go-starter/transport/constant"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"net/http"
-	"regexp"
 	"time"
 )
 
@@ -74,10 +72,6 @@ func (c *Client) NewRequest(ctx context.Context) *resty.Request {
 }
 
 func preSend(_ *resty.Client, r *resty.Request) error {
-	if isHealthCheckPath(r.RawRequest) {
-		return nil
-	}
-
 	httpFields := make(map[string]interface{})
 	httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
 	httpFields[constant.UrlFieldKey] = r.URL
@@ -97,10 +91,6 @@ func preSend(_ *resty.Client, r *resty.Request) error {
 }
 
 func postSend(_ *resty.Client, r *resty.Response) error {
-	if isHealthCheckPath(r.Request.RawRequest) {
-		return nil
-	}
-
 	httpFields := make(map[string]interface{})
 	httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
 	httpFields[constant.UrlFieldKey] = r.Request.URL
@@ -118,10 +108,6 @@ func postSend(_ *resty.Client, r *resty.Response) error {
 }
 
 func onError(r *resty.Request, err error) {
-	if isHealthCheckPath(r.RawRequest) {
-		return
-	}
-
 	if v, ok := err.(*resty.ResponseError); ok {
 		// v.Response contains the last response from the server
 		// v.Err contains the original error
@@ -136,16 +122,4 @@ func onError(r *resty.Request, err error) {
 		log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Error()
 	}
 	// Log the error, increment a metric, etc...
-}
-
-func isHealthCheckPath(r *http.Request) bool {
-	isHealthCheck, err := regexp.MatchString(healthcheck.URLPathRegex, r.URL.Path)
-	if err != nil {
-		log.Errorf(r.Context(), err, "Failed to health path match string, path=%s", r.URL.Path)
-		return false
-	}
-	if isHealthCheck && r.Method == http.MethodGet {
-		return true
-	}
-	return false
 }
