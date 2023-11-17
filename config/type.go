@@ -23,16 +23,16 @@ type ConfigImpl struct {
 }
 
 type Object struct {
-	App           *AppConfig           `yaml:"app"`
-	Transport     *TransportConfig     `yaml:"transport"`
-	Cors          *CorsConfig          `yaml:"cors"`
-	Database      []*DatabaseConfig    `yaml:"database"`
-	Redis         *RedisConfig         `yaml:"redis"`
-	Log           *LogConfig           `yaml:"log"`
-	Otel          *OtelConfig          `yaml:"otel"`
-	Google        *GoogleConfig        `yaml:"google"`
-	Zeebe         *ZeebeConfig         `yaml:"zeebe"`
-	ElasticSearch *ElasticSearchConfig `yaml:"elasticSearch"`
+	App           *AppConfig                 `yaml:"app"`
+	Transport     *TransportConfig           `yaml:"transport"`
+	Cors          *CorsConfig                `yaml:"cors"`
+	Database      map[string]*DatabaseConfig `yaml:"database"`
+	Redis         *RedisConfig               `yaml:"redis"`
+	Log           *LogConfig                 `yaml:"log"`
+	Otel          *OtelConfig                `yaml:"otel"`
+	Google        *GoogleConfig              `yaml:"google"`
+	Zeebe         *ZeebeConfig               `yaml:"zeebe"`
+	ElasticSearch *ElasticSearchConfig       `yaml:"elasticSearch"`
 }
 
 type AppConfig struct {
@@ -50,9 +50,14 @@ type ClientConfig struct {
 }
 
 type RestClientConfig struct {
-	Logging            bool `yaml:"logging"`
-	Timeout            int  `yaml:"timeout"`
-	InsecureSkipVerify bool `yaml:"insecureSkipVerify"`
+	Logging            *RestClientLoggingConfig `yaml:"logging"`
+	Timeout            int                      `yaml:"timeout"`
+	InsecureSkipVerify bool                     `yaml:"insecureSkipVerify"`
+}
+
+type RestClientLoggingConfig struct {
+	Stdout   bool   `yaml:"stdout"`
+	Database string `yaml:"database"`
 }
 
 type ServerConfig struct {
@@ -62,18 +67,35 @@ type ServerConfig struct {
 }
 
 type RestServerConfig struct {
-	Logging bool                 `yaml:"logging"`
-	Port    *HttpHttpsPortConfig `yaml:"port"`
+	Logging  *RestServerLoggingConfig `yaml:"logging"`
+	Port     *HttpHttpsPortConfig     `yaml:"port"`
+	Disabled bool                     `yaml:"disabled"`
+}
+
+type RestServerLoggingConfig struct {
+	Stdout   bool   `yaml:"stdout"`
+	Database string `yaml:"database"`
 }
 
 type GrpcServerConfig struct {
-	Logging bool                 `yaml:"logging"`
-	Port    *HttpHttpsPortConfig `yaml:"port"`
+	Logging  *GrpcServerLoggingConfig `yaml:"logging"`
+	Port     *HttpHttpsPortConfig     `yaml:"port"`
+	Disabled bool                     `yaml:"disabled"`
+}
+
+type GrpcServerLoggingConfig struct {
+	Stdout   bool   `yaml:"stdout"`
+	Database string `yaml:"database"`
 }
 
 type GraphQLServerConfig struct {
-	Logging bool                 `yaml:"logging"`
-	Port    *HttpHttpsPortConfig `yaml:"port"`
+	Logging *GraphQLServerLoggingConfig `yaml:"logging"`
+	Port    *HttpHttpsPortConfig        `yaml:"port"`
+}
+
+type GraphQLServerLoggingConfig struct {
+	Stdout   bool   `yaml:"stdout"`
+	Database string `yaml:"database"`
 }
 
 type HttpHttpsPortConfig struct {
@@ -93,7 +115,6 @@ type CorsConfig struct {
 }
 
 type DatabaseConfig struct {
-	Id                        string              `yaml:"id"`
 	Driver                    string              `yaml:"driver"`
 	Address                   string              `yaml:"address"`
 	Database                  string              `yaml:"database"`

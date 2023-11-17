@@ -3,6 +3,7 @@ package avro
 import (
 	"context"
 	"github.com/hamba/avro/v2"
+	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/constant/sym"
 	"github.com/rosaekapratama/go-starter/log"
 	"github.com/rosaekapratama/go-starter/otel"
@@ -31,7 +32,7 @@ func init() {
 	SchemaManager = &SchemaManagerImpl{schemas: &avro.SchemaCache{}}
 }
 
-func Init(ctx context.Context) {
+func Init(ctx context.Context, _ config.Config) {
 	dir, err := os.ReadDir(defaultAvscPath)
 	if err != nil {
 		if _, ok := err.(*fs.PathError); ok {

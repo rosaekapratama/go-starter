@@ -1,46 +1,36 @@
 package restserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/rosaekapratama/go-starter/avro"
+	"github.com/google/uuid"
 	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/constant/headers"
 	"github.com/rosaekapratama/go-starter/constant/integer"
+	"github.com/rosaekapratama/go-starter/constant/location"
 	"github.com/rosaekapratama/go-starter/constant/str"
 	"github.com/rosaekapratama/go-starter/constant/sym"
 	myContext "github.com/rosaekapratama/go-starter/context"
-	"github.com/rosaekapratama/go-starter/database"
-	"github.com/rosaekapratama/go-starter/elasticsearch"
-	"github.com/rosaekapratama/go-starter/google"
-	"github.com/rosaekapratama/go-starter/google/cloud/oauth"
-	"github.com/rosaekapratama/go-starter/google/cloud/pubsub"
-	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/sub"
-	"github.com/rosaekapratama/go-starter/google/cloud/scheduler"
-	"github.com/rosaekapratama/go-starter/google/cloud/storage"
-	"github.com/rosaekapratama/go-starter/google/firebase"
 	"github.com/rosaekapratama/go-starter/healthcheck"
 	"github.com/rosaekapratama/go-starter/keycloak"
 	"github.com/rosaekapratama/go-starter/log"
-	"github.com/rosaekapratama/go-starter/loginit"
-	"github.com/rosaekapratama/go-starter/mocks"
-	myOtel "github.com/rosaekapratama/go-starter/otel"
-	"github.com/rosaekapratama/go-starter/redis"
 	"github.com/rosaekapratama/go-starter/response"
 	"github.com/rosaekapratama/go-starter/transport/constant"
-	"github.com/rosaekapratama/go-starter/transport/restclient"
-	"github.com/rosaekapratama/go-starter/zeebe"
-	"github.com/stretchr/testify/mock"
+	"github.com/rosaekapratama/go-starter/transport/logging/models"
+	"github.com/rosaekapratama/go-starter/transport/logging/repositories"
+	"github.com/rosaekapratama/go-starter/utils"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	"io"
 	"net/http"
-	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -50,33 +40,99 @@ const (
 )
 
 var (
-	cfg        *config.Object
-	propagator = otel.GetTextMapPropagator()
-	Router     *gin.Engine
+	cfg           *config.Object
+	propagator    = otel.GetTextMapPropagator()
+	Router        *gin.Engine
+	logRepository repositories.IRestLogRepository
 )
 
+func cloneRequest(req *http.Request) (*http.Request, error) {
+	// Clone the request
+	clone := new(http.Request)
+	*clone = *req
+
+	// Copy the Headers
+	clone.Header = make(http.Header, len(req.Header))
+	for k, v := range req.Header {
+		clone.Header[k] = append([]string(nil), v...)
+	}
+
+	// Copy the Body
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	clone.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	// Restore the Body in the original request
+	req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	return clone, nil
+}
+
 func logging(c *gin.Context) {
-	if cfg.Transport.Server.Rest.Logging {
-		r := c.Request
+	// Skip if request is health check
+	isHealthCheck, _ := regexp.MatchString(healthcheck.URLPathRegex, c.Request.URL.Path)
+	if isHealthCheck {
+		return
+	}
+
+	var ctx context.Context
+	var body *string
+	r, err := cloneRequest(c.Request)
+	if err != nil {
+		log.Error(ctx, err, "Failed to clone http request for logging")
+	} else {
+		ctx = r.Context()
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Error(ctx, err, "Failed to read a copy of body request for logging")
+		}
+		body = utils.StringP(string(bodyBytes))
+		if cfg.Transport.Server.Rest.Logging.Stdout {
+			httpFields := make(map[string]interface{})
+			httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
+			httpFields[constant.UrlFieldKey] = r.URL
+			httpFields[constant.MethodFieldKey] = r.Method
+			httpFields[constant.IsServerFieldKey] = true
+			httpFields[constant.IsRequestFieldKey] = true
+			httpFields[constant.HeadersFieldKey] = r.Header
+			if r.MultipartForm != nil {
+				httpFields[constant.FormDataFieldKey] = r.MultipartForm
+			}
+			if body != nil {
+				httpFields[constant.BodyFieldKey] = body
+			}
+			log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
+		}
+
+		if cfg.Transport.Server.Rest.Logging.Database != str.Empty {
+			err := logRepository.Save(ctx, &models.TransportRestLog{
+				ID:           uuid.New(),
+				TraceID:      myContext.TraceIdFromContext(ctx),
+				SpanID:       myContext.SpanIdFromContext(ctx),
+				IsServer:     true,
+				IsRequest:    true,
+				URL:          fmt.Sprintf("%v", r.URL),
+				Method:       r.Method,
+				Headers:      utils.StringP(fmt.Sprintf("%v", r.Header)),
+				Body:         body,
+				StatusCode:   nil,
+				ErrorMessage: nil,
+				ProcessDT:    time.Now().In(location.AsiaJakarta),
+				ProcessBy:    config.Instance.GetObject().App.Name,
+			})
+			if err != nil {
+				log.Error(ctx, err, "Failed to save REST server request log")
+			}
+		}
+	}
+
+	c.Next()
+	i := c.Writer.(*WriterInterceptor)
+
+	if cfg.Transport.Server.Rest.Logging.Stdout {
 		httpFields := make(map[string]interface{})
-		httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
-		httpFields[constant.UrlFieldKey] = r.URL
-		httpFields[constant.MethodFieldKey] = r.Method
-		httpFields[constant.IsServerFieldKey] = true
-		httpFields[constant.IsRequestFieldKey] = true
-		httpFields[constant.HeadersFieldKey] = r.Header
-		if r.MultipartForm != nil {
-			httpFields[constant.FormDataFieldKey] = r.MultipartForm
-		}
-		if r.Body != nil {
-			httpFields[constant.BodyFieldKey] = r.Body
-		}
-		log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
-
-		c.Next()
-
-		i := c.Writer.(*WriterInterceptor)
-		httpFields = make(map[string]interface{})
 		httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
 		httpFields[constant.UrlFieldKey] = r.URL
 		httpFields[constant.MethodFieldKey] = r.Method
@@ -88,6 +144,30 @@ func logging(c *gin.Context) {
 			httpFields[constant.BodyFieldKey] = string(i.body)
 		}
 		log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
+	}
+
+	if cfg.Transport.Server.Rest.Logging.Database != str.Empty {
+		if len(i.body) > integer.Zero {
+			body = utils.StringP(string(i.body))
+		}
+		err := logRepository.Save(ctx, &models.TransportRestLog{
+			ID:           uuid.New(),
+			TraceID:      myContext.TraceIdFromContext(ctx),
+			SpanID:       myContext.SpanIdFromContext(ctx),
+			IsServer:     true,
+			IsRequest:    false,
+			URL:          fmt.Sprintf("%v", r.URL),
+			Method:       r.Method,
+			Headers:      utils.StringP(fmt.Sprintf("%v", i.ResponseWriter.Header())),
+			Body:         body,
+			StatusCode:   utils.StringP(strconv.Itoa(i.status)),
+			ErrorMessage: utils.StringP(i.response.Description()),
+			ProcessDT:    time.Now().In(location.AsiaJakarta),
+			ProcessBy:    config.Instance.GetObject().App.Name,
+		})
+		if err != nil {
+			log.Error(ctx, err, "Failed to save REST server response log")
+		}
 	}
 }
 
@@ -201,12 +281,12 @@ func injectAuthContext(c *gin.Context) {
 		auth = strings.TrimPrefix(auth, headers.BasicAuthPrefix)
 
 		// Decode basic auth
-		bytes, err := base64.StdEncoding.DecodeString(auth)
+		bs, err := base64.StdEncoding.DecodeString(auth)
 		if err != nil {
 			log.Error(ctx, err, "Failed to decode basic auth")
 		} else {
 			// Get the username from decoded value and set to context
-			username := strings.Split(string(bytes), sym.Colon)[integer.Zero]
+			username := strings.Split(string(bs), sym.Colon)[integer.Zero]
 			ctx = myContext.ContextWithUsername(ctx, username)
 
 			// Override request context with new context
@@ -315,12 +395,7 @@ func InjectKeycloakContext(additionalClaims ...string) gin.HandlerFunc {
 			// set developer provided claim to context if exists
 			for _, additionalClaim := range additionalClaims {
 				if v, ok := claims[additionalClaim]; ok {
-					c := v.(string)
-					if c == str.Empty {
-						log.Tracef(ctx, "Unable to set context, %s claim is empty", additionalClaim)
-					} else {
-						ctx = context.WithValue(ctx, additionalClaim, c)
-					}
+					ctx = context.WithValue(ctx, additionalClaim, v)
 				} else {
 					log.Tracef(ctx, "Unable to set context, missing %s claim", additionalClaim)
 				}
@@ -334,82 +409,22 @@ func InjectKeycloakContext(additionalClaims ...string) gin.HandlerFunc {
 	}
 }
 
-func initRun(ctx context.Context) {
-	// Init config package
-	config.Init()
-	config := config.Instance
-	cfg = config.GetObject()
-
-	// Init google credential
-	projectId := cfg.App.Mode
-	credentials, jsonKey := google.CreateCredentials(ctx, config)
-
-	// Extract project ID from credentials
-	if credentials != nil && credentials.ProjectID != str.Empty {
-		projectId = credentials.ProjectID
-	}
-
-	// Set project ID for loginit
-	loginit.SetProjectId(projectId)
-	log.Infof(ctx, "projectId=%s", projectId)
-
-	// Init google package
-	if credentials != nil {
-		firebaseApp := firebase.New(ctx, credentials)
-		oauthClient := oauth.New(ctx)
-		pubsubClient := pubsub.New(ctx, credentials)
-		sub.Init(pubsubClient)
-		scheduler.Init(ctx, credentials)
-		schedulerService := scheduler.Service
-		storage.Init(ctx, credentials)
-		storageClient := storage.Client
-		google.Init(
-			ctx,
-			credentials,
-			jsonKey,
-			firebaseApp,
-			oauthClient,
-			pubsubClient,
-			schedulerService,
-			storageClient)
-	}
-
-	// Init log package
-	log.Init(ctx, config, projectId)
-
-	// Init otel package
-	myOtel.Init(ctx, config)
-
-	// Init avro package
-	avro.Init(ctx)
-
-	// Init database package
-	database.Init(ctx, config)
-
-	// Init elasticsearch package
-	elasticsearch.Init(ctx, config)
-
-	// Init redis package
-	redis.Init(ctx, config)
-
-	// Init http client package
-	restclient.Init(ctx, config)
-
-	// Init zeebe package
-	zeebe.Init(ctx, config)
+func Init(_ context.Context, config config.Config, newLogRepository repositories.IRestLogRepository) {
+	logRepository = newLogRepository
 
 	// Set gin mode
+	cfg = config.GetObject()
 	gin.SetMode(cfg.App.Mode)
 	Router = gin.New()
 
 	// List of mandatory middleware
 	Router.Use(
+		extractTraceParent,
+		otelgin.Middleware(cfg.App.Name),
 		logging,
 		enableCors(),
-		extractTraceParent,
 		interceptResponse,
 		gin.Recovery(),
-		otelgin.Middleware(cfg.App.Name),
 		injectTraceParent,
 		injectAuthContext,
 	)
@@ -424,34 +439,19 @@ func initRun(ctx context.Context) {
 	Router.GET("/v1/health", gin.WrapH(healthcheck.HandlerV1()))
 }
 
-func initTest(_ context.Context) {
-	// To handle init() function which calls config
-	mockConfig := mocks.GetMockConfig()
-	mockConfig.On("GetString", mock.Anything).Return("string", nil)
-	mockConfig.On("GetInt", mock.Anything).Return(integer.Zero, nil)
-	mockConfig.On("GetBool", mock.Anything).Return(false, nil)
-	mockConfig.On("GetSlice", mock.Anything).Return(make([]interface{}, integer.Zero), nil)
-	mockConfig.On("GetStringAndThrowFatalIfEmpty", mock.Anything).Return("string", nil)
-	config.Instance = mockConfig
-}
-
-func init() {
-	ctx := context.Background()
-
-	args := os.Args
-	if strings.HasSuffix(args[0], ".test") {
-		initTest(ctx)
-	} else {
-		initRun(ctx)
-	}
-}
-
 func Run() {
 	ctx := context.Background()
 
-	// run the http server
-	err := Router.Run(fmt.Sprintf("%s:%d", "0.0.0.0", cfg.Transport.Server.Rest.Port.Http))
+	// Skip if disabled
+	if cfg.Transport.Server.Rest.Disabled {
+		log.Warn(ctx, "REST server is disabled")
+		return
+	}
+
+	port := cfg.Transport.Server.Rest.Port.Http
+	log.Infof(ctx, "Starting REST server on port %d", port)
+	err := Router.Run(fmt.Sprintf("%s:%d", "0.0.0.0", port))
 	if err != nil {
-		log.Fatal(ctx, err, "Failed to start server")
+		log.Fatalf(ctx, err, "Failed to run REST server, port=%d", port)
 	}
 }

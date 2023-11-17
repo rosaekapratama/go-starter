@@ -32,11 +32,11 @@ const (
 
 	PostgreSQL = "postgresql"
 	MySQL      = "mysql"
-	SQLServer  = "sqlserver"
+	MSSQL      = "mssql"
 
 	PostgreSQLPort = 5432
 	MySQLPort      = 3306
-	SQLServerPort  = 1433
+	MSSQLPort      = 1433
 )
 
 var (
@@ -66,12 +66,7 @@ func Init(ctx context.Context, config config.Config) {
 
 	gormDBMap := make(map[string]*gorm.DB)
 	sqlDBMap := make(map[string]*sql.DB)
-	for _, databaseConfig := range cfg {
-		if databaseConfig.Id == str.Empty {
-			log.Fatal(ctx, response.ConfigNotFound, "Missing database id")
-			return
-		}
-
+	for id, databaseConfig := range cfg {
 		if databaseConfig.Driver == str.Empty {
 			log.Fatal(ctx, response.ConfigNotFound, "Missing database driver")
 			return
@@ -138,7 +133,7 @@ func Init(ctx context.Context, config config.Config) {
 					databaseConfig.Database,
 				),
 			)
-		case SQLServer:
+		case MSSQL:
 			if len(address) > integer.One {
 				port, err = strconv.Atoi(address[integer.One])
 				if err != nil {
@@ -146,7 +141,7 @@ func Init(ctx context.Context, config config.Config) {
 					return
 				}
 			} else {
-				port = SQLServerPort
+				port = MSSQLPort
 			}
 			dialector = sqlserver.Open(
 				fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s",
@@ -178,13 +173,13 @@ func Init(ctx context.Context, config config.Config) {
 
 		gormDB, err := gorm.Open(dialector, &gormConfig)
 		if err != nil {
-			log.Fatalf(ctx, err, "Failed to connect to database, id=%s", databaseConfig.Id)
+			log.Fatalf(ctx, err, "Failed to connect to database, id=%s", id)
 			return
 		}
 
 		sqlDB, err := gormDB.DB()
 		if err != nil {
-			log.Fatalf(ctx, err, "Failed to get generic database object *sql.DB, id=%s", databaseConfig.Id)
+			log.Fatalf(ctx, err, "Failed to get generic database object *sql.DB, id=%s", id)
 			return
 		}
 
@@ -205,8 +200,8 @@ func Init(ctx context.Context, config config.Config) {
 			}
 		}
 
-		gormDBMap[databaseConfig.Id] = gormDB
-		sqlDBMap[databaseConfig.Id] = sqlDB
+		gormDBMap[id] = gormDB
+		sqlDBMap[id] = sqlDB
 	}
 
 	Manager = &ManagerImpl{

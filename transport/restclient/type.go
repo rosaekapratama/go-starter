@@ -18,5 +18,10 @@ type ManagerImpl struct {
 type Client struct {
 	Resty     *resty.Client
 	transport *http.Transport
-	logging   bool
+	logging   *clientLogging
+}
+
+type clientLogging struct {
+	Stdout   bool   `yaml:"stdout"`
+	Database string `yaml:"database"`
 }

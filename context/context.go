@@ -55,6 +55,16 @@ func ContextWithTraceParent(parent context.Context, traceparent string) context.
 	return trace.ContextWithSpanContext(parent, sc)
 }
 
+func TraceIdFromContext(ctx context.Context) string {
+	sc := trace.SpanContextFromContext(ctx)
+	return sc.TraceID().String()
+}
+
+func SpanIdFromContext(ctx context.Context) string {
+	sc := trace.SpanContextFromContext(ctx)
+	return sc.SpanID().String()
+}
+
 func ContextWithToken(parentContext context.Context, token string) context.Context {
 	return context.WithValue(parentContext, tokenKey, token)
 }

@@ -7,22 +7,27 @@ import (
 	"github.com/rosaekapratama/go-starter/constant/headers"
 	"github.com/rosaekapratama/go-starter/constant/headers/contenttype"
 	"github.com/rosaekapratama/go-starter/constant/integer"
+	"github.com/rosaekapratama/go-starter/constant/str"
 	"github.com/rosaekapratama/go-starter/log"
 	"github.com/rosaekapratama/go-starter/transport/constant"
+	"github.com/rosaekapratama/go-starter/transport/logging/repositories"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"net/http"
 	"time"
 )
 
 var (
-	_config config.Config
-	Manager IManager
+	_config       config.Config
+	Manager       IManager
+	LogRepository repositories.IRestLogRepository
 )
 
-func Init(ctx context.Context, config config.Config) {
+func Init(ctx context.Context, config config.Config, restLogRepository repositories.IRestLogRepository) {
 	_config = config
+	logStdout := _config.GetObject().Transport.Client.Rest.Logging.Stdout
+	logDB := _config.GetObject().Transport.Client.Rest.Logging.Database
 	client, err := newClient(ctx,
-		WithLogging(_config.GetObject().Transport.Client.Rest.Logging),
+		WithLogging(logStdout, logDB),
 		WithTimeout(time.Duration(_config.GetObject().Transport.Client.Rest.Timeout)*time.Second),
 		WithInsecureSkipVerify(_config.GetObject().Transport.Client.Rest.InsecureSkipVerify))
 	if err != nil {
@@ -31,6 +36,10 @@ func Init(ctx context.Context, config config.Config) {
 	}
 	Manager = &ManagerImpl{
 		defaultClient: client,
+	}
+
+	if logDB != str.Empty {
+		LogRepository = restLogRepository
 	}
 }
 
@@ -51,10 +60,15 @@ func newClient(ctx context.Context, opts ...ClientOption) (*Client, error) {
 		}
 	}
 	client.Resty.SetTransport(otelhttp.NewTransport(client.transport))
-	if client.logging {
-		client.Resty.OnBeforeRequest(preSend)
-		client.Resty.OnAfterResponse(postSend)
-		client.Resty.OnError(onError)
+	if client.logging != nil && client.logging.Stdout {
+		client.Resty.OnBeforeRequest(preStdoutLogging)
+		client.Resty.OnAfterResponse(postStdoutLogging)
+		client.Resty.OnError(errorStdoutLogging)
+	}
+	if client.logging != nil && client.logging.Database != str.Empty {
+		client.Resty.OnBeforeRequest(preDatabaseLogging)
+		client.Resty.OnAfterResponse(postDatabaseLogging)
+		client.Resty.OnError(errorDatabaseLogging)
 	}
 	return client, nil
 }
@@ -71,7 +85,7 @@ func (c *Client) NewRequest(ctx context.Context) *resty.Request {
 	return request
 }
 
-func preSend(_ *resty.Client, r *resty.Request) error {
+func preStdoutLogging(_ *resty.Client, r *resty.Request) error {
 	httpFields := make(map[string]interface{})
 	httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
 	httpFields[constant.UrlFieldKey] = r.URL
@@ -86,11 +100,10 @@ func preSend(_ *resty.Client, r *resty.Request) error {
 		httpFields[constant.BodyFieldKey] = r.Body
 	}
 	log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
-
 	return nil
 }
 
-func postSend(_ *resty.Client, r *resty.Response) error {
+func postStdoutLogging(_ *resty.Client, r *resty.Response) error {
 	httpFields := make(map[string]interface{})
 	httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
 	httpFields[constant.UrlFieldKey] = r.Request.URL
@@ -107,7 +120,7 @@ func postSend(_ *resty.Client, r *resty.Response) error {
 	return nil
 }
 
-func onError(r *resty.Request, err error) {
+func errorStdoutLogging(r *resty.Request, err error) {
 	if v, ok := err.(*resty.ResponseError); ok {
 		// v.Response contains the last response from the server
 		// v.Err contains the original error
@@ -122,4 +135,41 @@ func onError(r *resty.Request, err error) {
 		log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Error()
 	}
 	// Log the error, increment a metric, etc...
+}
+
+func preDatabaseLogging(_ *resty.Client, r *resty.Request) error {
+	ctx := r.Context()
+	err := LogRepository.SaveRequest(r, false)
+	if err != nil {
+		log.Error(ctx, err, "Failed to save request log")
+	}
+	return nil
+}
+
+func postDatabaseLogging(_ *resty.Client, r *resty.Response) error {
+	ctx := r.Request.Context()
+	err := LogRepository.SaveResponse(r, false)
+	if err != nil {
+		log.Error(ctx, err, "Failed to save response log")
+	}
+	return nil
+}
+
+func errorDatabaseLogging(r *resty.Request, err error) {
+	ctx := r.Context()
+	if v, ok := err.(*resty.ResponseError); ok {
+		// v.Response contains the last response from the server
+		// v.Err contains the original error
+
+		err := LogRepository.SaveError(r, v.Response, false, err)
+		if err != nil {
+			log.Error(ctx, err, "Failed to save response log")
+		}
+	} else {
+		ctx := r.Context()
+		err := LogRepository.SaveError(r, nil, false, err)
+		if err != nil {
+			log.Error(ctx, err, "Failed to save response log")
+		}
+	}
 }

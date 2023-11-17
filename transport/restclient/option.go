@@ -11,7 +11,8 @@ type ClientOption interface {
 }
 
 type loggingOption struct {
-	logging bool
+	stdout   bool
+	database string
 }
 
 type insecureSkipVerifyOption struct {
@@ -23,7 +24,10 @@ type timeoutClientOption struct {
 }
 
 func (o *loggingOption) Apply(_ context.Context, client *Client) error {
-	client.logging = o.logging
+	client.logging = &clientLogging{
+		Stdout:   o.stdout,
+		Database: o.database,
+	}
 	return nil
 }
 
@@ -42,8 +46,8 @@ func (o *timeoutClientOption) Apply(_ context.Context, client *Client) error {
 	return nil
 }
 
-func WithLogging(logging bool) ClientOption {
-	return &loggingOption{logging: logging}
+func WithLogging(stdout bool, database string) ClientOption {
+	return &loggingOption{stdout: stdout, database: database}
 }
 
 func WithInsecureSkipVerify(insecureSkipVerify bool) ClientOption {

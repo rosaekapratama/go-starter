@@ -62,7 +62,7 @@ func (c *ClientImpl) Upload(ctx context.Context, bucketName string, filePath str
 	return written, nil
 }
 
-func (c *ClientImpl) Download(ctx context.Context, bucketName string, path string) (obj *storage.ObjectHandle, src io.Reader, err error) {
+func (c *ClientImpl) Download(ctx context.Context, bucketName string, path string) (obj *storage.ObjectHandle, data []byte, err error) {
 	ctx, span := otel.Trace(ctx, spanDownloadFile)
 	defer span.End()
 
@@ -76,9 +76,15 @@ func (c *ClientImpl) Download(ctx context.Context, bucketName string, path strin
 
 	// Download an object with storage.Reader.
 	obj = b.Object(path)
-	src, err = b.Object(path).NewReader(ctx)
+	reader, err := obj.NewReader(ctx)
 	if err != nil {
 		log.Errorf(ctx, err, "Failed create reader for download, bucket=%s, filePath=%s", bucketName, path)
+		return nil, nil, err
+	}
+
+	data, err = io.ReadAll(reader)
+	if err != nil {
+		log.Errorf(ctx, err, "Failed to read all data for download, bucket=%s, filePath=%s", bucketName, path)
 		return nil, nil, err
 	}
 
