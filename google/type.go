@@ -3,7 +3,7 @@ package google
 import (
 	"cloud.google.com/go/pubsub"
 	"github.com/rosaekapratama/go-starter/google/cloud/oauth"
-	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/pub"
+	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/publisher"
 	"github.com/rosaekapratama/go-starter/google/cloud/scheduler"
 	"github.com/rosaekapratama/go-starter/google/cloud/storage"
 	"github.com/rosaekapratama/go-starter/google/firebase"
@@ -16,7 +16,7 @@ type IManager interface {
 	GetFirebaseApp() firebase.App
 	GetOAuthClient() oauth.Client
 	GetPubSubClient() *pubsub.Client
-	NewPubSubPublisher(topicId string, opts ...pub.TopicOption) pub.Publisher
+	NewPubSubPublisher(topicId string, opts ...publisher.TopicOption) publisher.Publisher
 	GetSchedulerService() scheduler.IService
 	GetStorageClient() storage.IClient
 }

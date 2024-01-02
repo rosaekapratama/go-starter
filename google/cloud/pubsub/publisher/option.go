@@ -1,13 +1,16 @@
-package pub
+package publisher
 
 import (
 	"cloud.google.com/go/pubsub"
 	"encoding/json"
+	"fmt"
 	"github.com/hamba/avro/v2"
 	myAvro "github.com/rosaekapratama/go-starter/avro"
-	pubsub2 "github.com/rosaekapratama/go-starter/google/cloud/pubsub"
+	myPubsub "github.com/rosaekapratama/go-starter/google/cloud/pubsub"
 	"github.com/rosaekapratama/go-starter/log"
 	"golang.org/x/net/context"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"time"
 )
 
@@ -16,13 +19,13 @@ var (
 )
 
 type Encoder interface {
-	Encode(ctx context.Context, data interface{}) ([]byte, error)
+	Encode(ctx context.Context, schemaSettings *pubsub.SchemaSettings, data interface{}) ([]byte, error)
 }
 
 type jsonEncoder struct {
 }
 
-func (e *jsonEncoder) Encode(_ context.Context, data interface{}) ([]byte, error) {
+func (e *jsonEncoder) Encode(_ context.Context, _ *pubsub.SchemaSettings, data interface{}) ([]byte, error) {
 	return json.Marshal(data)
 }
 
@@ -30,7 +33,10 @@ type avroEncoder struct {
 	schemaName string
 }
 
-func (e *avroEncoder) Encode(ctx context.Context, data interface{}) ([]byte, error) {
+type protobufEncoder struct {
+}
+
+func (e *avroEncoder) Encode(ctx context.Context, _ *pubsub.SchemaSettings, data interface{}) ([]byte, error) {
 	schema, err := schemaManager.GetSchema(ctx, e.schemaName)
 	if err != nil {
 		log.Errorf(ctx, err, "[Pub/Sub] Failed to get avro schema, schemaName=%s", e.schemaName)
@@ -41,8 +47,35 @@ func (e *avroEncoder) Encode(ctx context.Context, data interface{}) ([]byte, err
 		log.Error(ctx, err, "[Pub/Sub] avro.Marshal error")
 		return nil, err
 	}
-	log.Trace(ctx, "[Pub/Sub] Prepare avro-encoded message")
 	return bytes, nil
+}
+
+func (e *protobufEncoder) Encode(ctx context.Context, schemaSettings *pubsub.SchemaSettings, data interface{}) (bytes []byte, err error) {
+	var protoMessage proto.Message
+	if v, ok := data.(proto.Message); ok {
+		protoMessage = v
+	} else {
+		return nil, fmt.Errorf("pubsub message object must implement proto.Message, type=%T", data)
+	}
+
+	encoding := schemaSettings.Encoding
+	switch encoding {
+	case pubsub.EncodingBinary:
+		bytes, err = proto.Marshal(protoMessage)
+		if err != nil {
+			log.Error(ctx, err, "[Pub/Sub] proto.Marshal error")
+		}
+	case pubsub.EncodingJSON:
+		bytes, err = protojson.Marshal(protoMessage)
+		if err != nil {
+			log.Error(ctx, err, "[Pub/Sub] protojson.Marshal error")
+		}
+	default:
+		err = fmt.Errorf("invalid publisher protobuf encoding type, type=%v", encoding)
+		log.Errorf(ctx, err, "[Pub/Sub] Invalid publisher encoding type, type=%v", encoding)
+	}
+
+	return
 }
 
 type PublishOption interface {
@@ -55,7 +88,7 @@ type attrOption struct {
 }
 
 type stateOption struct {
-	state pubsub2.State
+	state myPubsub.State
 }
 
 func (o *attrOption) Apply(message *pubsub.Message) {
@@ -63,7 +96,7 @@ func (o *attrOption) Apply(message *pubsub.Message) {
 }
 
 func (o *stateOption) Apply(message *pubsub.Message) {
-	message.Attributes[pubsub2.StateAttrKey] = string(o.state)
+	message.Attributes[myPubsub.StateAttrKey] = string(o.state)
 }
 
 func WithAttribute(key string, value string) PublishOption {
@@ -73,7 +106,7 @@ func WithAttribute(key string, value string) PublishOption {
 	}
 }
 
-func WithState(state pubsub2.State) PublishOption {
+func WithState(state myPubsub.State) PublishOption {
 	return &stateOption{
 		state: state,
 	}

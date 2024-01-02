@@ -97,11 +97,10 @@ func logging(c *gin.Context) {
 			httpFields[constant.IsServerFieldKey] = true
 			httpFields[constant.IsRequestFieldKey] = true
 			httpFields[constant.HeadersFieldKey] = r.Header
-			if r.MultipartForm != nil {
-				httpFields[constant.FormDataFieldKey] = r.MultipartForm
-			}
 			if body != nil {
-				httpFields[constant.BodyFieldKey] = body
+				if len(bodyBytes) > integer.Zero && len(bodyBytes) <= (64*1000) {
+					httpFields[constant.BodyFieldKey] = *body
+				}
 			}
 			log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
 		}
@@ -140,7 +139,7 @@ func logging(c *gin.Context) {
 		httpFields[constant.IsRequestFieldKey] = false
 		httpFields[constant.StatusCodeFieldKey] = i.status
 		httpFields[constant.HeadersFieldKey] = i.ResponseWriter.Header()
-		if len(i.body) > integer.Zero {
+		if len(i.body) > integer.Zero && len(i.body) <= (64*1000) {
 			httpFields[constant.BodyFieldKey] = string(i.body)
 		}
 		log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
@@ -194,12 +193,12 @@ func enableCors() gin.HandlerFunc {
 			corsConfig.MaxAge = time.Duration(propsConfig.MaxAge) * time.Second
 		}
 		log.Info(ctx, "CORS is enabled")
-		log.Debugf(ctx, "CORS allow credentials : %s", corsConfig.AllowCredentials)
+		log.Debugf(ctx, "CORS allow credentials : %v", corsConfig.AllowCredentials)
 		log.Debugf(ctx, "CORS allow origins     : %v", corsConfig.AllowOrigins)
 		log.Debugf(ctx, "CORS allow methods     : %v", corsConfig.AllowMethods)
 		log.Debugf(ctx, "CORS allow headers     : %v", corsConfig.AllowHeaders)
 		log.Debugf(ctx, "CORS expose headers    : %v", corsConfig.ExposeHeaders)
-		log.Debugf(ctx, "CORS max age           : %i second", propsConfig.MaxAge)
+		log.Debugf(ctx, "CORS max age           : %v second", propsConfig.MaxAge)
 		return cors.New(corsConfig)
 	} else {
 		log.Info(ctx, "CORS is disabled")

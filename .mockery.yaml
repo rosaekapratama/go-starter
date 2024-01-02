@@ -19,7 +19,7 @@ packages:
   github.com/rosaekapratama/go-starter/google/cloud/oauth:
     interfaces:
       Client:
-  github.com/rosaekapratama/go-starter/google/cloud/pubsub/pub:
+  github.com/rosaekapratama/go-starter/google/cloud/pubsub/publisher:
     interfaces:
       Publisher:
   github.com/rosaekapratama/go-starter/google/cloud/scheduler:
@@ -32,6 +32,9 @@ packages:
     interfaces:
       ILocker:
       ILock:
-  githubcom/rosaekapratama/go-starter/transport/restclient:
+  github.com/rosaekapratama/go-starter/transport/restclient:
+    interfaces:
+      IManager:
+  github.com/rosaekapratama/go-starter/transport/grpcclient:
     interfaces:
       IManager:

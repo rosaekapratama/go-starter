@@ -11,7 +11,7 @@ import (
 	"github.com/rosaekapratama/go-starter/constant/str"
 	"github.com/rosaekapratama/go-starter/constant/sym"
 	"github.com/rosaekapratama/go-starter/google/cloud/oauth"
-	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/pub"
+	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/publisher"
 	"github.com/rosaekapratama/go-starter/google/cloud/scheduler"
 	"github.com/rosaekapratama/go-starter/google/cloud/storage"
 	"github.com/rosaekapratama/go-starter/google/firebase"
@@ -134,8 +134,8 @@ func (m *ManagerImpl) GetPubSubClient() *pubsub.Client {
 	return m.pubsubClient
 }
 
-func (m *ManagerImpl) NewPubSubPublisher(topicId string, opts ...pub.TopicOption) pub.Publisher {
-	return pub.NewPublisher(m.pubsubClient, topicId, opts...)
+func (m *ManagerImpl) NewPubSubPublisher(topicId string, opts ...publisher.TopicOption) publisher.Publisher {
+	return publisher.NewPublisher(m.pubsubClient, topicId, opts...)
 }
 
 func (m *ManagerImpl) GetSchedulerService() scheduler.IService {

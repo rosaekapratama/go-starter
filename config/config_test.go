@@ -56,8 +56,7 @@ cors:
   disabled: false
 
 database:
-  -
-    id: db1
+  db1:
     driver: mysql
     address: localhost:3306
     database: mydb
@@ -67,8 +66,7 @@ database:
       maxIdle: 10
       maxOpen: 100
       maxLifeTime: 3600
-  -
-    id: db2
+  db2:
     driver: postgres
     address: localhost:5432
     database: anotherdb

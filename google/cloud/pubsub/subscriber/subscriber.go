@@ -1,4 +1,4 @@
-package sub
+package subscriber
 
 import (
 	"cloud.google.com/go/pubsub"
@@ -44,24 +44,26 @@ type Subscriber struct {
 //		defer msg.Ack()
 //		log.Tracef(ctx, msg.ID, string(data))
 //	}
-func Receive(subId string, f func(ctx context.Context, message *pubsub.Message, data interface{}), decoder Decoder, opts ...SubscriptionOption) {
+func Receive(subId string, f func(ctx context.Context, plainMessage *pubsub.Message, decodedMessage interface{}), opts ...SubscriptionOption) {
 	wg.Add(integer.One)
-	go receive(subId, myPubsub.StateAny, f, decoder, opts...)
+	go receive(subId, myPubsub.StateAny, f, opts...)
 }
 
-func ReceiveWithState(subId string, state myPubsub.State, f func(ctx context.Context, message *pubsub.Message, data interface{}), decoder Decoder, opts ...SubscriptionOption) {
+func ReceiveWithState(subId string, state myPubsub.State, f func(ctx context.Context, plainMessage *pubsub.Message, decodedMessage interface{}), opts ...SubscriptionOption) {
 	wg.Add(integer.One)
-	go receive(subId, state, f, decoder, opts...)
+	go receive(subId, state, f, opts...)
 }
 
-func receive(subId string, state myPubsub.State, f func(ctx context.Context, message *pubsub.Message, data interface{}), decoder Decoder, opts ...SubscriptionOption) {
+func receive(subId string, state myPubsub.State, f func(ctx context.Context, plainMessage *pubsub.Message, decodedMessage interface{}), opts ...SubscriptionOption) {
 	ctx := context.Background()
 	cfg := config.Instance.GetObject().Google.Cloud.Pubsub.Subscriber
 
 	// Init subscription and apply subscription options
 	sub := client.Subscription(subId)
 	for _, opt := range opts {
-		opt.Apply(sub)
+		if opt != nil {
+			opt.ApplyMessageOption(sub)
+		}
 	}
 
 	// Check if exists or not
@@ -79,47 +81,60 @@ func receive(subId string, state myPubsub.State, f func(ctx context.Context, mes
 	wg.Wait()
 	log.Infof(ctx, "Start google pubsub sub, subId=%s", subId)
 	// Run subscription.Receive function to receive data from pubsub
-	err = sub.Receive(ctx, func(ctx context.Context, message *pubsub.Message) {
+	err = sub.Receive(ctx, func(ctx context.Context, plainMessage *pubsub.Message) {
 		// Add traceparent to pubsub message attributes
-		ctx = myContext.ContextWithTraceParent(ctx, message.Attributes[myPubsub.TraceparentAttrKey])
+		ctx = myContext.ContextWithTraceParent(ctx, plainMessage.Attributes[myPubsub.TraceparentAttrKey])
 		ctx, span := otel.Trace(ctx, fmt.Sprintf(spanSubscriber, subId))
 		defer span.End()
 
 		// If state matches, then continue, or break if not matches
 		var messageState string
-		if v, ok := message.Attributes[myPubsub.StateAttrKey]; ok {
+		if v, ok := plainMessage.Attributes[myPubsub.StateAttrKey]; ok {
 			messageState = v
 		}
 
-		if cfg.Logging {
+		if cfg.Logging.Stdout {
 			// Logging incoming message
 			pubsubFields := make(map[string]interface{})
 			pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
 			pubsubFields[constant.IsSubscriberFieldKey] = true
 			pubsubFields[constant.SubscriberIdFieldKey] = subId
-			pubsubFields[constant.MessageIdFieldKey] = message.ID
+			pubsubFields[constant.MessageIdFieldKey] = plainMessage.ID
 			pubsubFields[constant.MessageStateFieldKey] = messageState
-			pubsubFields[constant.MessageDataFieldKey] = string(message.Data)
+			if len(plainMessage.Data) > integer.Zero && len(plainMessage.Data) <= (64*1000) {
+				pubsubFields[constant.MessageDataFieldKey] = string(plainMessage.Data)
+			}
 			log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
 		}
 
 		if state != myPubsub.StateAny && string(state) != strings.ToLower(messageState) {
 			// Break cause not match
 			log.Tracef(ctx, "State doesn't match, subId=%s, subState=%s, msgState=%s", subId, state, messageState)
-			message.Ack()
+			plainMessage.Ack()
 			return
 		}
 
-		// Decode message if decoder not nil
-		if decoder != nil {
-			data, err := decoder.Apply(ctx, message)
+		// Apply first found decoder
+		var decodedMessage interface{}
+		for _, opt := range opts {
+			if opt == nil {
+				continue
+			}
+			decodedMessage, err = opt.ApplyDecoderOption(ctx, plainMessage)
 			if err != nil {
-				log.Errorf(ctx, err, "Failed to apply receive decoder option, subId=%s, option=%T", subId, decoder)
+				log.Errorf(ctx, err, "Failed to apply receiver decoder option, subId=%s, option=%T", subId, opt)
+				plainMessage.Nack()
 				return
 			}
-			f(ctx, message, data)
+			if decodedMessage != nil {
+				break
+			}
+		}
+
+		if decodedMessage != nil {
+			f(ctx, plainMessage, decodedMessage)
 		} else {
-			f(ctx, message, nil)
+			f(ctx, plainMessage, nil)
 		}
 	})
 	if err != nil {

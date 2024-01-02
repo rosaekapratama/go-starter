@@ -1,4 +1,4 @@
-package pub
+package publisher
 
 import (
 	"cloud.google.com/go/pubsub"
@@ -46,14 +46,26 @@ func (p *PublisherImpl) WithAvroEncoder(schemaName string) Publisher {
 	return p
 }
 
-// WithLogging enable or disable outgoing message logging
-func (p *PublisherImpl) WithLogging(logging bool) Publisher {
-	p.logging = logging
+// WithProtobufEncoder set publisher encoder with protobuf encoder
+func (p *PublisherImpl) WithProtobufEncoder() Publisher {
+	p.encoder = &protobufEncoder{}
+	return p
+}
+
+// WithStdoutLogging enable or disable outgoing message logging to stdout
+func (p *PublisherImpl) WithStdoutLogging(logging bool) Publisher {
+	p.logging.Stdout = logging
+	return p
+}
+
+// WithDatabaseLogging enable or disable outgoing message logging to database
+func (p *PublisherImpl) WithDatabaseLogging(connectionId string) Publisher {
+	p.logging.Database = connectionId
 	return p
 }
 
 // initMessage Init pubsub message
-func initMessage(ctx context.Context, data interface{}, encoder Encoder, opts ...PublishOption) (*pubsub.Message, error) {
+func (p *PublisherImpl) initMessage(ctx context.Context, data interface{}, opts ...PublishOption) (*pubsub.Message, error) {
 	message := &pubsub.Message{
 		Attributes: map[string]string{
 			myPubsub.TraceparentAttrKey:       myContext.TraceParentFromContext(ctx),
@@ -69,8 +81,14 @@ func initMessage(ctx context.Context, data interface{}, encoder Encoder, opts ..
 	}
 
 	// Encode message
-	if encoder != nil {
-		bytes, err := encoder.Encode(ctx, data)
+	if p.encoder != nil {
+		topicConfig, err := p.topic.Config(ctx)
+		if err != nil {
+			log.Errorf(ctx, err, "[Pub/Sub] Failed to get topic config, topicId=%s", p.topic.ID())
+			return nil, err
+		}
+
+		bytes, err := p.encoder.Encode(ctx, topicConfig.SchemaSettings, data)
 		if err != nil {
 			log.Error(ctx, err, "[Pub/Sub] Failed to encode data")
 			return nil, err
@@ -97,7 +115,7 @@ func (p *PublisherImpl) Publish(ctx context.Context, data interface{}, opts ...P
 	ctx, span := myOtel.Trace(ctx, fmt.Sprintf(spanPublish, p.topic.ID()))
 	defer span.End()
 
-	message, err := initMessage(ctx, data, p.encoder, opts...)
+	message, err := p.initMessage(ctx, data, opts...)
 	if err != nil {
 		log.Error(ctx, err, "Failed to init pubsub message")
 		return str.Empty, err
@@ -107,7 +125,9 @@ func (p *PublisherImpl) Publish(ctx context.Context, data interface{}, opts ...P
 	pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
 	pubsubFields[constant.IsSubscriberFieldKey] = false
 	pubsubFields[constant.TopicIdFieldKey] = p.topic.ID()
-	pubsubFields[constant.MessageDataFieldKey] = string(message.Data)
+	if len(message.Data) > integer.Zero && len(message.Data) <= (64*1000) {
+		pubsubFields[constant.MessageDataFieldKey] = string(message.Data)
+	}
 
 	result := p.topic.Publish(ctx, message)
 	// Block until the result is returned and
@@ -116,7 +136,7 @@ func (p *PublisherImpl) Publish(ctx context.Context, data interface{}, opts ...P
 	if err != nil {
 		pubsubFields[constant.ErrorFieldKey] = err.Error()
 		log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Error()
-	} else if p.logging {
+	} else if p.logging.Stdout {
 		pubsubFields[constant.MessageIdFieldKey] = serverId
 		log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
 	}

@@ -2,6 +2,8 @@ package restclient
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/constant/headers"
@@ -93,11 +95,22 @@ func preStdoutLogging(_ *resty.Client, r *resty.Request) error {
 	httpFields[constant.IsServerFieldKey] = false
 	httpFields[constant.IsRequestFieldKey] = true
 	httpFields[constant.HeadersFieldKey] = r.Header
-	if r.FormData != nil {
-		httpFields[constant.FormDataFieldKey] = r.FormData
-	}
 	if r.Body != nil {
-		httpFields[constant.BodyFieldKey] = r.Body
+		var body string
+		contentType := r.Header.Get(headers.ContentType)
+		if contentType == contenttype.ApplicationJson {
+			bytes, err := json.Marshal(r.Body)
+			if err != nil {
+				log.Error(r.Context(), err, "Failed to marshal body payload for logging")
+				body = "Cannot parsed payload"
+			}
+			body = string(bytes)
+		} else {
+			body = fmt.Sprintf("%v", r.Body)
+		}
+		if len(body) > integer.Zero && len(body) <= (64*1000) {
+			httpFields[constant.BodyFieldKey] = body
+		}
 	}
 	log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
 	return nil
@@ -112,7 +125,7 @@ func postStdoutLogging(_ *resty.Client, r *resty.Response) error {
 	httpFields[constant.IsRequestFieldKey] = false
 	httpFields[constant.StatusCodeFieldKey] = r.StatusCode()
 	httpFields[constant.HeadersFieldKey] = r.Header
-	if len(r.Body()) > integer.Zero {
+	if len(r.Body()) > integer.Zero && len(r.Body()) <= (64*1000) {
 		httpFields[constant.BodyFieldKey] = string(r.Body())
 	}
 	log.WithTraceFields(r.Request.Context()).WithFields(httpFields).GetLogrusLogger().Info()

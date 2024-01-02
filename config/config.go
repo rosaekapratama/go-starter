@@ -59,22 +59,29 @@ func Init() {
 		App: &AppConfig{Mode: gin.DebugMode},
 		Transport: &TransportConfig{
 			Client: &ClientConfig{
-				Rest: &RestClientConfig{InsecureSkipVerify: false},
+				Rest: &RestClientConfig{
+					Logging:            &RestClientLoggingConfig{},
+					Timeout:            60,
+					InsecureSkipVerify: false,
+				},
 			},
 			Server: &ServerConfig{
 				Rest: &RestServerConfig{
+					Logging: &RestServerLoggingConfig{},
 					Port: &HttpHttpsPortConfig{
 						Http:  defaultHTTPRESTPort,
 						Https: defaultHTTPSRESTPort,
 					},
 				},
 				Grpc: &GrpcServerConfig{
+					Logging: &GrpcServerLoggingConfig{},
 					Port: &HttpHttpsPortConfig{
 						Http:  defaultHTTPGRPCPort,
 						Https: defaultHTTPSGRPCPort,
 					},
 				},
 				GraphQL: &GraphQLServerConfig{
+					Logging: &GraphQLServerLoggingConfig{},
 					Port: &HttpHttpsPortConfig{
 						Http:  defaultHTTPGraphQLPort,
 						Https: defaultHTTPSGraphQLPort,
@@ -119,10 +126,10 @@ func Init() {
 			Cloud: &GoogleCloudConfig{
 				Pubsub: &GoogleCloudPubsubConfig{
 					Publisher: &GoogleCloudPubsubPublisherConfig{
-						Logging: false,
+						Logging: &GoogleCloudPubsubPublisherLoggingConfig{},
 					},
 					Subscriber: &GoogleCloudPubsubSubscriberConfig{
-						Logging: false,
+						Logging: &GoogleCloudPubsubSubscriberLoggingConfig{},
 					},
 				},
 			},

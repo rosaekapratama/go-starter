@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/log"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"net"
 )
@@ -14,8 +15,9 @@ var (
 )
 
 func Init(_ context.Context, _ config.Config) {
-	var opts []grpc.ServerOption
-	GRPCServer = grpc.NewServer(opts...)
+	GRPCServer = grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
 }
 
 func Run() {

@@ -11,7 +11,7 @@ import (
 	"github.com/rosaekapratama/go-starter/google"
 	"github.com/rosaekapratama/go-starter/google/cloud/oauth"
 	"github.com/rosaekapratama/go-starter/google/cloud/pubsub"
-	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/sub"
+	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/subscriber"
 	"github.com/rosaekapratama/go-starter/google/cloud/scheduler"
 	"github.com/rosaekapratama/go-starter/google/cloud/storage"
 	"github.com/rosaekapratama/go-starter/google/firebase"
@@ -20,6 +20,7 @@ import (
 	"github.com/rosaekapratama/go-starter/mocks"
 	myOtel "github.com/rosaekapratama/go-starter/otel"
 	"github.com/rosaekapratama/go-starter/redis"
+	"github.com/rosaekapratama/go-starter/transport/grpcclient"
 	"github.com/rosaekapratama/go-starter/transport/grpcserver"
 	"github.com/rosaekapratama/go-starter/transport/logging/repositories"
 	"github.com/rosaekapratama/go-starter/transport/restclient"
@@ -81,7 +82,7 @@ func initRun(ctx context.Context) {
 		firebaseApp := firebase.New(ctx, credentials)
 		oauthClient := oauth.New(ctx)
 		pubsubClient := pubsub.New(ctx, credentials)
-		sub.Init(pubsubClient)
+		subscriber.Init(pubsubClient)
 		scheduler.Init(ctx, credentials)
 		schedulerService := scheduler.Service
 		storage.Init(ctx, credentials)
@@ -138,6 +139,9 @@ func initRun(ctx context.Context) {
 
 	// Init GRPC server
 	grpcserver.Init(ctx, configInstance)
+
+	// Init GRPC client
+	grpcclient.Init(ctx, configInstance)
 }
 
 func Run() {

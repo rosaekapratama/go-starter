@@ -118,15 +118,14 @@ func addTraceEntries(ctx context.Context, logger logrus.Ext1FieldLogger) logrus.
 }
 
 func addCallerEntries(logger logrus.Ext1FieldLogger) logrus.Ext1FieldLogger {
-	newLogger := logger
-	if pc, file, line, ok := runtime.Caller(2); ok {
-		newLogger.
+	if pc, file, line, ok := runtime.Caller(4); ok {
+		newLogger := logger.
 			WithField(constant.CallerFileKey, file).
 			WithField(constant.CallerFuncKey, runtime.FuncForPC(pc).Name()).
 			WithField(constant.CallerLineKey, line)
 		return newLogger
 	}
-	return newLogger
+	return logger
 }
 
 // StdEntries Return entries with trace ID entry from span context,

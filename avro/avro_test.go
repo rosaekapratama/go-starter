@@ -49,5 +49,5 @@ func TestAvroTestSuite(t *testing.T) {
 
 func (s *AvroTestSuite) TestInitReadAvroDirPathError() {
 	mockLog.EXPECT().Warn(mock.Anything, errAvroSchemaManagerIsDisabled)
-	Init(ctx)
+	Init(ctx, nil)
 }

@@ -1,8 +1,9 @@
-package pub
+package publisher
 
 import (
 	"cloud.google.com/go/pubsub"
 	"context"
+	"github.com/rosaekapratama/go-starter/config"
 )
 
 type Publisher interface {
@@ -10,11 +11,13 @@ type Publisher interface {
 	BatchPublish(ctx context.Context, batchData []interface{}, opts ...PublishOption) error
 	WithJsonEncoder() Publisher
 	WithAvroEncoder(schemaName string) Publisher
-	WithLogging(logging bool) Publisher
+	WithProtobufEncoder() Publisher
+	WithStdoutLogging(logging bool) Publisher
+	WithDatabaseLogging(connectionId string) Publisher
 }
 
 type PublisherImpl struct {
 	topic   *pubsub.Topic
 	encoder Encoder
-	logging bool
+	logging *config.GoogleCloudPubsubPublisherLoggingConfig
 }

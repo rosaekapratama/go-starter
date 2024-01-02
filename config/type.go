@@ -317,11 +317,21 @@ type GoogleCloudPubsubConfig struct {
 }
 
 type GoogleCloudPubsubPublisherConfig struct {
-	Logging bool `yaml:"logging"`
+	Logging *GoogleCloudPubsubPublisherLoggingConfig `yaml:"logging"`
+}
+
+type GoogleCloudPubsubPublisherLoggingConfig struct {
+	Stdout   bool   `yaml:"stdout"`
+	Database string `yaml:"database"`
 }
 
 type GoogleCloudPubsubSubscriberConfig struct {
-	Logging bool `yaml:"logging"`
+	Logging *GoogleCloudPubsubSubscriberLoggingConfig `yaml:"logging"`
+}
+
+type GoogleCloudPubsubSubscriberLoggingConfig struct {
+	Stdout   bool   `yaml:"stdout"`
+	Database string `yaml:"database"`
 }
 
 type GoogleCloudOauth2VerificationConfig struct {

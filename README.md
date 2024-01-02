@@ -31,7 +31,9 @@ transport:
       insecureSkipVerify: false
   server:
     rest:
-      logging: false # Show incoming and outgoing message globally, default is false
+      logging: 
+        stdout: false # Show incoming and outgoing message globally, default is false
+        db: pgsql1 # Write log to database with ID pgsql1
       port:
         http: 9092
         https: 9443
@@ -120,7 +122,7 @@ redis:
   useDisconnectedReplicas: false
 
 database:
-  - id: pgsql1
+  pgsql1:
     driver: pgsql
     address: localhost
     database: mydatabase
@@ -133,7 +135,7 @@ database:
     slowThreshold: 200 # In millisecond
     skipDefaultTransaction: false
     ignoreRecordNotFoundError: false
-  - id: pgsql2
+  pgsql2:
     driver: pgsql
     address: localhost:5432
     database: mydatabase
@@ -146,7 +148,7 @@ database:
     slowThreshold: 200 # In millisecond
     skipDefaultTransaction: false
     ignoreRecordNotFoundError: false
-  - id: mssql
+  mssql:
     driver: mssql
     address: localhost:5432
     database: mydatabase
@@ -156,7 +158,7 @@ database:
       maxIdle: 30
       maxOpen: 30
       maxLifeTime: 60000
-  
+
 otel:
   trace:
     exporter:
@@ -180,13 +182,17 @@ otel:
   disabled: false # If true then otel init will be skipped
 
 google:
-  credential: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX # Credential JSON key
+  credential: XJDKERdlshtkdlkslritjhdsldfjdlerh23943hlk45hlsdkl # Credential JSON key
   cloud:
     pubsub:
       publisher:
-        logging: false # Show outgoing message globally, default is false
+        logging:
+          stdout: false # Show incoming and outgoing message globally, default is false
+          db: pgsql1 # Write log to database with ID pgsql1
       subscriber:
-        logging: false # Show incoming message globally, default is false
+        logging:
+          stdout: false # Show incoming and outgoing message globally, default is false
+          db: pgsql1 # Write log to database with ID pgsql1
     oauth2:
       verification:
         - aud: 3259999.apps.googleusercontent.com
