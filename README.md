@@ -1,4 +1,4 @@
-# Go Common GG #
+# Go Starter #
 
 Auto configuration and collection of modules for Go REST services powered by Gin web framework and GORM.
 
