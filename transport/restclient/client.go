@@ -11,8 +11,8 @@ import (
 	"github.com/rosaekapratama/go-starter/constant/integer"
 	"github.com/rosaekapratama/go-starter/constant/str"
 	"github.com/rosaekapratama/go-starter/log"
-	"github.com/rosaekapratama/go-starter/transport/constant"
-	"github.com/rosaekapratama/go-starter/transport/logging/repositories"
+	"github.com/rosaekapratama/go-starter/log/constant"
+	"github.com/rosaekapratama/go-starter/log/transport/repositories"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"net/http"
 	"time"
@@ -21,10 +21,10 @@ import (
 var (
 	_config       config.Config
 	Manager       IManager
-	LogRepository repositories.IRestLogRepository
+	LogRepository repositories.ITransportLogRepository
 )
 
-func Init(ctx context.Context, config config.Config, restLogRepository repositories.IRestLogRepository) {
+func Init(ctx context.Context, config config.Config, restLogRepository repositories.ITransportLogRepository) {
 	_config = config
 	logStdout := _config.GetObject().Transport.Client.Rest.Logging.Stdout
 	logDB := _config.GetObject().Transport.Client.Rest.Logging.Database
@@ -89,7 +89,7 @@ func (c *Client) NewRequest(ctx context.Context) *resty.Request {
 
 func preStdoutLogging(_ *resty.Client, r *resty.Request) error {
 	httpFields := make(map[string]interface{})
-	httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
+	httpFields[constant.LogTypeFieldKey] = constant.LogTypeRest
 	httpFields[constant.UrlFieldKey] = r.URL
 	httpFields[constant.MethodFieldKey] = r.Method
 	httpFields[constant.IsServerFieldKey] = false
@@ -118,7 +118,7 @@ func preStdoutLogging(_ *resty.Client, r *resty.Request) error {
 
 func postStdoutLogging(_ *resty.Client, r *resty.Response) error {
 	httpFields := make(map[string]interface{})
-	httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
+	httpFields[constant.LogTypeFieldKey] = constant.LogTypeRest
 	httpFields[constant.UrlFieldKey] = r.Request.URL
 	httpFields[constant.MethodFieldKey] = r.Request.Method
 	httpFields[constant.IsServerFieldKey] = false
@@ -139,7 +139,7 @@ func errorStdoutLogging(r *resty.Request, err error) {
 		// v.Err contains the original error
 
 		httpFields := make(map[string]interface{})
-		httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
+		httpFields[constant.LogTypeFieldKey] = constant.LogTypeRest
 		httpFields[constant.UrlFieldKey] = r.URL
 		httpFields[constant.MethodFieldKey] = r.Method
 		httpFields[constant.IsServerFieldKey] = false
@@ -151,38 +151,22 @@ func errorStdoutLogging(r *resty.Request, err error) {
 }
 
 func preDatabaseLogging(_ *resty.Client, r *resty.Request) error {
-	ctx := r.Context()
-	err := LogRepository.SaveRequest(r, false)
-	if err != nil {
-		log.Error(ctx, err, "Failed to save request log")
-	}
+	LogRepository.SaveRestRequest(r, false)
 	return nil
 }
 
 func postDatabaseLogging(_ *resty.Client, r *resty.Response) error {
-	ctx := r.Request.Context()
-	err := LogRepository.SaveResponse(r, false)
-	if err != nil {
-		log.Error(ctx, err, "Failed to save response log")
-	}
+	LogRepository.SaveRestResponse(r, false)
 	return nil
 }
 
 func errorDatabaseLogging(r *resty.Request, err error) {
-	ctx := r.Context()
 	if v, ok := err.(*resty.ResponseError); ok {
 		// v.Response contains the last response from the server
 		// v.Err contains the original error
 
-		err := LogRepository.SaveError(r, v.Response, false, err)
-		if err != nil {
-			log.Error(ctx, err, "Failed to save response log")
-		}
+		LogRepository.SaveRestError(r, v.Response, false, err)
 	} else {
-		ctx := r.Context()
-		err := LogRepository.SaveError(r, nil, false, err)
-		if err != nil {
-			log.Error(ctx, err, "Failed to save response log")
-		}
+		LogRepository.SaveRestError(r, nil, false, err)
 	}
 }

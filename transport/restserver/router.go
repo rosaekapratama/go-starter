@@ -1,7 +1,6 @@
 package restserver
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -19,14 +18,15 @@ import (
 	"github.com/rosaekapratama/go-starter/healthcheck"
 	"github.com/rosaekapratama/go-starter/keycloak"
 	"github.com/rosaekapratama/go-starter/log"
+	"github.com/rosaekapratama/go-starter/log/constant"
+	"github.com/rosaekapratama/go-starter/log/transport/models"
+	"github.com/rosaekapratama/go-starter/log/transport/repositories"
 	"github.com/rosaekapratama/go-starter/response"
-	"github.com/rosaekapratama/go-starter/transport/constant"
-	"github.com/rosaekapratama/go-starter/transport/logging/models"
-	"github.com/rosaekapratama/go-starter/transport/logging/repositories"
 	"github.com/rosaekapratama/go-starter/utils"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	"gorm.io/datatypes"
 	"io"
 	"net/http"
 	"regexp"
@@ -43,32 +43,8 @@ var (
 	cfg           *config.Object
 	propagator    = otel.GetTextMapPropagator()
 	Router        *gin.Engine
-	logRepository repositories.IRestLogRepository
+	logRepository repositories.ITransportLogRepository
 )
-
-func cloneRequest(req *http.Request) (*http.Request, error) {
-	// Clone the request
-	clone := new(http.Request)
-	*clone = *req
-
-	// Copy the Headers
-	clone.Header = make(http.Header, len(req.Header))
-	for k, v := range req.Header {
-		clone.Header[k] = append([]string(nil), v...)
-	}
-
-	// Copy the Body
-	bodyBytes, err := io.ReadAll(req.Body)
-	if err != nil {
-		return nil, err
-	}
-	clone.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-	// Restore the Body in the original request
-	req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-	return clone, nil
-}
 
 func logging(c *gin.Context) {
 	// Skip if request is health check
@@ -79,7 +55,7 @@ func logging(c *gin.Context) {
 
 	var ctx context.Context
 	var body *string
-	r, err := cloneRequest(c.Request)
+	r, err := utils.CloneHttpRequest(c.Request)
 	if err != nil {
 		log.Error(ctx, err, "Failed to clone http request for logging")
 	} else {
@@ -91,7 +67,7 @@ func logging(c *gin.Context) {
 		body = utils.StringP(string(bodyBytes))
 		if cfg.Transport.Server.Rest.Logging.Stdout {
 			httpFields := make(map[string]interface{})
-			httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
+			httpFields[constant.LogTypeFieldKey] = constant.LogTypeRest
 			httpFields[constant.UrlFieldKey] = r.URL
 			httpFields[constant.MethodFieldKey] = r.Method
 			httpFields[constant.IsServerFieldKey] = true
@@ -106,24 +82,32 @@ func logging(c *gin.Context) {
 		}
 
 		if cfg.Transport.Server.Rest.Logging.Database != str.Empty {
-			err := logRepository.Save(ctx, &models.TransportRestLog{
-				ID:           uuid.New(),
-				TraceID:      myContext.TraceIdFromContext(ctx),
-				SpanID:       myContext.SpanIdFromContext(ctx),
-				IsServer:     true,
-				IsRequest:    true,
-				URL:          fmt.Sprintf("%v", r.URL),
-				Method:       r.Method,
-				Headers:      utils.StringP(fmt.Sprintf("%v", r.Header)),
-				Body:         body,
-				StatusCode:   nil,
-				ErrorMessage: nil,
-				ProcessDT:    time.Now().In(location.AsiaJakarta),
-				ProcessBy:    config.Instance.GetObject().App.Name,
-			})
-			if err != nil {
-				log.Error(ctx, err, "Failed to save REST server request log")
-			}
+			go func(ctx context.Context) {
+				restLog, err := json.Marshal(&models.TransportRestLog{
+					IsServer:   true,
+					IsRequest:  true,
+					URL:        fmt.Sprintf("%v", r.URL),
+					Method:     r.Method,
+					Headers:    utils.StringP(fmt.Sprintf("%v", r.Header)),
+					Body:       body,
+					StatusCode: nil,
+				})
+				if err != nil {
+					log.Error(ctx, err, "failed to marshal REST server request log to json")
+					return
+				}
+
+				transportLog := &models.TransportLog{
+					ID:        uuid.New(),
+					TraceID:   myContext.TraceIdFromContext(ctx),
+					SpanID:    myContext.SpanIdFromContext(ctx),
+					Type:      constant.LogTypeRest,
+					Log:       datatypes.JSON(restLog),
+					ProcessDT: time.Now().In(location.AsiaJakarta),
+					ProcessBy: config.Instance.GetObject().App.Name,
+				}
+				logRepository.Save(ctx, transportLog)
+			}(myContext.NewContextFromTraceParent(ctx))
 		}
 	}
 
@@ -132,7 +116,7 @@ func logging(c *gin.Context) {
 
 	if cfg.Transport.Server.Rest.Logging.Stdout {
 		httpFields := make(map[string]interface{})
-		httpFields[constant.LogTypeFieldKey] = constant.LogTypeHttp
+		httpFields[constant.LogTypeFieldKey] = constant.LogTypeRest
 		httpFields[constant.UrlFieldKey] = r.URL
 		httpFields[constant.MethodFieldKey] = r.Method
 		httpFields[constant.IsServerFieldKey] = true
@@ -149,24 +133,34 @@ func logging(c *gin.Context) {
 		if len(i.body) > integer.Zero {
 			body = utils.StringP(string(i.body))
 		}
-		err := logRepository.Save(ctx, &models.TransportRestLog{
-			ID:           uuid.New(),
-			TraceID:      myContext.TraceIdFromContext(ctx),
-			SpanID:       myContext.SpanIdFromContext(ctx),
-			IsServer:     true,
-			IsRequest:    false,
-			URL:          fmt.Sprintf("%v", r.URL),
-			Method:       r.Method,
-			Headers:      utils.StringP(fmt.Sprintf("%v", i.ResponseWriter.Header())),
-			Body:         body,
-			StatusCode:   utils.StringP(strconv.Itoa(i.status)),
-			ErrorMessage: utils.StringP(i.response.Description()),
-			ProcessDT:    time.Now().In(location.AsiaJakarta),
-			ProcessBy:    config.Instance.GetObject().App.Name,
-		})
-		if err != nil {
-			log.Error(ctx, err, "Failed to save REST server response log")
-		}
+
+		go func(ctx context.Context) {
+			restLog, marshalErr := json.Marshal(&models.TransportRestLog{
+				IsServer:   true,
+				IsRequest:  false,
+				URL:        fmt.Sprintf("%v", r.URL),
+				Method:     r.Method,
+				Headers:    utils.StringP(fmt.Sprintf("%v", i.ResponseWriter.Header())),
+				Body:       body,
+				StatusCode: utils.StringP(strconv.Itoa(i.status)),
+			})
+			if marshalErr != nil {
+				log.Error(ctx, marshalErr, "failed to marshal REST response log to json")
+				return
+			}
+
+			transportLog := &models.TransportLog{
+				ID:           uuid.New(),
+				TraceID:      myContext.TraceIdFromContext(ctx),
+				SpanID:       myContext.SpanIdFromContext(ctx),
+				Type:         constant.LogTypeRest,
+				Log:          datatypes.JSON(restLog),
+				ErrorMessage: utils.StringP(i.response.Description()),
+				ProcessDT:    time.Now().In(location.AsiaJakarta),
+				ProcessBy:    config.Instance.GetObject().App.Name,
+			}
+			logRepository.Save(ctx, transportLog)
+		}(myContext.NewContextFromTraceParent(ctx))
 	}
 }
 
@@ -391,10 +385,15 @@ func InjectKeycloakContext(additionalClaims ...string) gin.HandlerFunc {
 				log.Trace(ctx, "Unable to set context, missing email claim")
 			}
 
-			// set developer provided claim to context if exists
+			// set custom provided claim to context if exists
 			for _, additionalClaim := range additionalClaims {
 				if v, ok := claims[additionalClaim]; ok {
-					ctx = context.WithValue(ctx, additionalClaim, v)
+					ctx = context.WithValue(
+						ctx,
+						additionalClaim,
+						v,
+					)
+					myContext.AddManagedKey(additionalClaim)
 				} else {
 					log.Tracef(ctx, "Unable to set context, missing %s claim", additionalClaim)
 				}
@@ -408,7 +407,7 @@ func InjectKeycloakContext(additionalClaims ...string) gin.HandlerFunc {
 	}
 }
 
-func Init(_ context.Context, config config.Config, newLogRepository repositories.IRestLogRepository) {
+func Init(_ context.Context, config config.Config, newLogRepository repositories.ITransportLogRepository) {
 	logRepository = newLogRepository
 
 	// Set gin mode

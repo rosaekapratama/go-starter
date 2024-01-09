@@ -11,13 +11,21 @@ import (
 )
 
 var (
-	GRPCServer *grpc.Server
+	serverOptions []grpc.ServerOption
+	GRPCServer    *grpc.Server
 )
 
 func Init(_ context.Context, _ config.Config) {
-	GRPCServer = grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-	)
+	opts := make([]grpc.ServerOption, 0)
+	opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
+	opts = append(opts, grpc.UnaryInterceptor(unaryMetadataContextInterceptor))
+	opts = append(opts, grpc.StreamInterceptor(streamMetadataContextInterceptor))
+	opts = append(opts, serverOptions...)
+	GRPCServer = grpc.NewServer(opts...)
+}
+
+func AddServerOption(opts ...grpc.ServerOption) {
+	serverOptions = append(serverOptions, opts...)
 }
 
 func Run() {

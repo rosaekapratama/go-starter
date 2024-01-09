@@ -47,6 +47,7 @@ type TransportConfig struct {
 
 type ClientConfig struct {
 	Rest *RestClientConfig `yaml:"rest"`
+	Soap *SoapClientConfig `yaml:"soap"`
 }
 
 type RestClientConfig struct {
@@ -56,6 +57,17 @@ type RestClientConfig struct {
 }
 
 type RestClientLoggingConfig struct {
+	Stdout   bool   `yaml:"stdout"`
+	Database string `yaml:"database"`
+}
+
+type SoapClientConfig struct {
+	Logging            *SoapClientLoggingConfig `yaml:"logging"`
+	Timeout            int                      `yaml:"timeout"`
+	InsecureSkipVerify bool                     `yaml:"insecureSkipVerify"`
+}
+
+type SoapClientLoggingConfig struct {
 	Stdout   bool   `yaml:"stdout"`
 	Database string `yaml:"database"`
 }

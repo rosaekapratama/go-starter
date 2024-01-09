@@ -7,6 +7,7 @@ import (
 	"github.com/rosaekapratama/go-starter/constant/sym"
 	"github.com/rosaekapratama/go-starter/log"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/metadata"
 	"strings"
 )
 
@@ -18,9 +19,19 @@ const (
 	fullnameKey       = "fullname"
 	realmKey          = "realm"
 	emailKey          = "email"
-	terminalIdKey     = "terminalId"
-	providerIdKey     = "providerId"
 )
+
+var (
+	keys = []string{tokenKey, userIdKey, usernameKey, fullnameKey, realmKey, emailKey}
+)
+
+func GetAllManagedKey() []string {
+	return keys
+}
+
+func AddManagedKey(key string) {
+	keys = append(keys, key)
+}
 
 func NewContextFromTraceParent(ctx context.Context) context.Context {
 	return ContextWithTraceParent(context.Background(), TraceParentFromContext(ctx))
@@ -131,24 +142,28 @@ func EmailFromContext(ctx context.Context) (email string, exists bool) {
 	return ctx.Value(emailKey).(string), true
 }
 
-func ContextWithTerminalId(parentContext context.Context, terminalId string) context.Context {
-	return context.WithValue(parentContext, terminalIdKey, terminalId)
-}
-
-func TerminalIdFromContext(ctx context.Context) (terminalId string, exists bool) {
-	if ctx.Value(terminalIdKey) == nil {
-		return str.Empty, false
+func InjectMetadataToContext(ctx context.Context) context.Context {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		for _, key := range GetAllManagedKey() {
+			values := md.Get(key)
+			if len(values) > 0 && values[0] != str.Empty {
+				ctx = context.WithValue(
+					ctx,
+					key,
+					values[0],
+				)
+			}
+		}
 	}
-	return ctx.Value(terminalIdKey).(string), true
+	return ctx
 }
 
-func ContextWithProviderId(parentContext context.Context, providerId string) context.Context {
-	return context.WithValue(parentContext, providerIdKey, providerId)
-}
-
-func ProviderIdFromContext(ctx context.Context) (terminalId string, exists bool) {
-	if ctx.Value(providerIdKey) == nil {
-		return str.Empty, false
+func InjectContextToMetadata(ctx context.Context) context.Context {
+	m := make(map[string]string)
+	for _, key := range GetAllManagedKey() {
+		m[key] = ctx.Value(key).(string)
 	}
-	return ctx.Value(providerIdKey).(string), true
+	md := metadata.New(m)
+	return metadata.NewOutgoingContext(ctx, md)
 }

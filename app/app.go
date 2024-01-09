@@ -16,15 +16,16 @@ import (
 	"github.com/rosaekapratama/go-starter/google/cloud/storage"
 	"github.com/rosaekapratama/go-starter/google/firebase"
 	"github.com/rosaekapratama/go-starter/log"
+	"github.com/rosaekapratama/go-starter/log/transport/repositories"
 	"github.com/rosaekapratama/go-starter/loginit"
 	"github.com/rosaekapratama/go-starter/mocks"
 	myOtel "github.com/rosaekapratama/go-starter/otel"
 	"github.com/rosaekapratama/go-starter/redis"
 	"github.com/rosaekapratama/go-starter/transport/grpcclient"
 	"github.com/rosaekapratama/go-starter/transport/grpcserver"
-	"github.com/rosaekapratama/go-starter/transport/logging/repositories"
 	"github.com/rosaekapratama/go-starter/transport/restclient"
 	"github.com/rosaekapratama/go-starter/transport/restserver"
+	"github.com/rosaekapratama/go-starter/transport/soapclient"
 	"github.com/rosaekapratama/go-starter/zeebe"
 	"github.com/stretchr/testify/mock"
 	"os"
@@ -120,7 +121,7 @@ func initRun(ctx context.Context) {
 	zeebe.Init(ctx, configInstance)
 
 	// Init rest logging repository
-	var restLogRepository repositories.IRestLogRepository
+	var restLogRepository repositories.ITransportLogRepository
 	dbLog := configInstance.GetObject().Transport.Server.Rest.Logging.Database
 	if dbLog != str.Empty {
 		DB, _, err := database.Manager.DB(ctx, dbLog)
@@ -128,10 +129,13 @@ func initRun(ctx context.Context) {
 			log.Fatalf(ctx, err, "Failed to find database ID '%s'", dbLog)
 			return
 		}
-		restLogRepository = repositories.NewRestLogRepository(DB)
+		restLogRepository = repositories.NewTransportLogRepository(DB)
 	}
 
-	// Init http client package
+	// Init SOAP client
+	soapclient.Init(ctx, configInstance, restLogRepository)
+
+	// Init REST client
 	restclient.Init(ctx, configInstance, restLogRepository)
 
 	// Init REST server

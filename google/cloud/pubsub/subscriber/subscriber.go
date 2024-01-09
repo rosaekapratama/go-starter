@@ -8,8 +8,8 @@ import (
 	"github.com/rosaekapratama/go-starter/constant/integer"
 	myContext "github.com/rosaekapratama/go-starter/context"
 	myPubsub "github.com/rosaekapratama/go-starter/google/cloud/pubsub"
-	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/constant"
 	"github.com/rosaekapratama/go-starter/log"
+	"github.com/rosaekapratama/go-starter/log/constant"
 	"github.com/rosaekapratama/go-starter/otel"
 	"github.com/rosaekapratama/go-starter/response"
 	"strings"
@@ -96,7 +96,7 @@ func receive(subId string, state myPubsub.State, f func(ctx context.Context, pla
 		if cfg.Logging.Stdout {
 			// Logging incoming message
 			pubsubFields := make(map[string]interface{})
-			pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
+			pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubSub
 			pubsubFields[constant.IsSubscriberFieldKey] = true
 			pubsubFields[constant.SubscriberIdFieldKey] = subId
 			pubsubFields[constant.MessageIdFieldKey] = plainMessage.ID

@@ -11,8 +11,8 @@ import (
 	"github.com/rosaekapratama/go-starter/constant/str"
 	myContext "github.com/rosaekapratama/go-starter/context"
 	myPubsub "github.com/rosaekapratama/go-starter/google/cloud/pubsub"
-	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/constant"
 	"github.com/rosaekapratama/go-starter/log"
+	"github.com/rosaekapratama/go-starter/log/constant"
 	myOtel "github.com/rosaekapratama/go-starter/otel"
 	"github.com/rosaekapratama/go-starter/response"
 	"strconv"
@@ -122,7 +122,7 @@ func (p *PublisherImpl) Publish(ctx context.Context, data interface{}, opts ...P
 	}
 
 	pubsubFields := make(map[string]interface{})
-	pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubsub
+	pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubSub
 	pubsubFields[constant.IsSubscriberFieldKey] = false
 	pubsubFields[constant.TopicIdFieldKey] = p.topic.ID()
 	if len(message.Data) > integer.Zero && len(message.Data) <= (64*1000) {

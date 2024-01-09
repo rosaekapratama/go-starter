@@ -64,6 +64,11 @@ func Init() {
 					Timeout:            60,
 					InsecureSkipVerify: false,
 				},
+				Soap: &SoapClientConfig{
+					Logging:            &SoapClientLoggingConfig{},
+					Timeout:            60,
+					InsecureSkipVerify: false,
+				},
 			},
 			Server: &ServerConfig{
 				Rest: &RestServerConfig{

@@ -1,12 +1,16 @@
 package utils
 
 import (
+	"bytes"
 	"context"
 	"github.com/rosaekapratama/go-starter/constant/env"
 	"github.com/rosaekapratama/go-starter/constant/integer"
 	"github.com/rosaekapratama/go-starter/constant/str"
+	myContext "github.com/rosaekapratama/go-starter/context"
 	"github.com/rosaekapratama/go-starter/log"
+	"io"
 	"math/rand"
+	"net/http"
 	"os"
 	"reflect"
 	"strconv"
@@ -254,4 +258,58 @@ func IsZeroValue(v interface{}) bool {
 	}
 	zeroValue := reflect.Zero(val.Type()).Interface()
 	return reflect.DeepEqual(val.Interface(), zeroValue)
+}
+
+func CloneHttpRequest(req *http.Request) (*http.Request, error) {
+	// Clone the request
+	clone := new(http.Request)
+	*clone = *req
+
+	// Copy the Headers
+	clone.Header = make(http.Header, len(req.Header))
+	for k, v := range req.Header {
+		clone.Header[k] = append([]string(nil), v...)
+	}
+
+	// Copy the Body
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	clone.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	// Restore the Body in the original request
+	req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	return clone.WithContext(myContext.NewContextFromTraceParent(req.Context())), nil
+}
+
+func CloneHttpResponse(res *http.Response) (*http.Response, error) {
+	// Clone the request
+	clone := new(http.Response)
+	*clone = *res
+
+	// Copy the Headers
+	clone.Header = make(http.Header, len(res.Header))
+	for k, v := range res.Header {
+		clone.Header[k] = append([]string(nil), v...)
+	}
+
+	// Copy the Body
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	clone.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	// Restore the Body in the original request
+	res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	// Restore http request
+	reqClone, err := CloneHttpRequest(res.Request)
+	if err == nil {
+		clone.Request = reqClone
+	}
+
+	return clone, nil
 }

@@ -81,6 +81,7 @@ const (
 	XRatelimitLimit        = "X-Ratelimit-Limit"
 	XRatelimitRemaining    = "X-Ratelimit-Remaining"
 	XRatelimitReset        = "X-Ratelimit-Reset"
+	SOAPAction             = "SOAPAction"
 	Host                   = "Host"
 	Realm                  = "Realm"
 	Traceparent            = "Traceparent"

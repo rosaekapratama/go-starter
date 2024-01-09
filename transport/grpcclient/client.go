@@ -20,8 +20,11 @@ func Init(_ context.Context, _ config.Config) {
 }
 
 func (m ManagerImpl) InitConn(ctx context.Context, connId string, address string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error) {
-	opts = append(opts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
-	conn, err = grpc.Dial(address, opts...)
+	grpcOptions := append([]grpc.DialOption{}, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
+	grpcOptions = append(grpcOptions, grpc.WithUnaryInterceptor(unaryMetadataContextInterceptor))
+	grpcOptions = append(grpcOptions, grpc.WithStreamInterceptor(streamMetadataContextInterceptor))
+	grpcOptions = append(grpcOptions, opts...)
+	conn, err = grpc.Dial(address, grpcOptions...)
 	if err != nil {
 		log.Errorf(ctx, err, "failed to init GRPC client conn, connId=%s", connId)
 		return

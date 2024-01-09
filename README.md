@@ -29,6 +29,10 @@ transport:
       logging: false # Show incoming and outgoing message globally, default is false
       timeout: 30 # Wait time in second
       insecureSkipVerify: false
+    soap:
+      logging: false # Show incoming and outgoing message globally, default is false
+      timeout: 30 # Wait time in second
+      insecureSkipVerify: false
   server:
     rest:
       logging: 
