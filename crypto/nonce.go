@@ -17,10 +17,6 @@ var (
 	src = rand.NewSource(time.Now().UnixNano())
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 func GenerateNonce() string {
 	n := 12
 	b := make([]byte, n)

@@ -6,7 +6,7 @@ type Client interface {
 	VerifyToken(ctx context.Context, token string) (response *InfotokenResponse, err error)
 }
 
-type ClientImpl struct {
+type clientImpl struct {
 	tokeninfoEndpoint string
 }
 

@@ -64,6 +64,11 @@ func GetPageFromRequest(r *http.Request) (*page.PageRequest, error) {
 		}
 	}
 
+	if pageSizeInt > page.MaxPageSize {
+		log.Trace(ctx, response.PageSizeExceedsMaxLimit)
+		return nil, response.PageSizeExceedsMaxLimit
+	}
+
 	pageRequest := page.NewPageRequest(pageNumInt, pageSizeInt)
 	if !pageRequest.IsValid() {
 		log.Trace(ctx, response.InvalidPageRequest, "Invalid page request")

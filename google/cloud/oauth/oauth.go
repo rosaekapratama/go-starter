@@ -13,11 +13,11 @@ import (
 const (
 	errFailedToGetTokenInfo = "failed to get token info from google"
 
-	spanVerifyToken   = "common.gcloud.Verify"
+	spanVerifyToken   = "common.google.cloud.oauth.VerifyToken"
 	tokeninfoEndpoint = "https://oauth2.googleapis.com/tokeninfo?id_token=%s"
 )
 
-func (c *ClientImpl) VerifyToken(ctx context.Context, token string) (response *InfotokenResponse, err error) {
+func (c *clientImpl) VerifyToken(ctx context.Context, token string) (response *InfotokenResponse, err error) {
 	ctx, span := otel.Trace(ctx, spanVerifyToken)
 	defer span.End()
 
@@ -43,7 +43,7 @@ func (c *ClientImpl) VerifyToken(ctx context.Context, token string) (response *I
 	}
 }
 
-func New(ctx context.Context) Client {
+func NewClient(ctx context.Context) Client {
 	log.Info(ctx, "Google OAuth client service is initiated")
-	return &ClientImpl{tokeninfoEndpoint: tokeninfoEndpoint}
+	return &clientImpl{tokeninfoEndpoint: tokeninfoEndpoint}
 }

@@ -101,19 +101,19 @@ func (f *JSONFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 			data[k] = v.Error()
 		default:
 			switch k {
-			case constant.TraceIdKey:
+			case constant.TraceIdLogKey:
 				projectId := str.Nil
 				if f.ProjectId != str.Empty {
 					projectId = f.ProjectId
 				}
 				data[FieldLoggingGoogleapisComTrace] = fmt.Sprintf(TraceFormat, projectId, v)
-			case constant.SpanIdKey:
+			case constant.SpanIdLogKey:
 				data[FieldLoggingGoogleapisComSpanID] = v
-			case constant.CallerFileKey:
+			case constant.CallerFileLogKey:
 				sourceLocation[FieldLoggingGoogleapisComSourceLocationFile] = v
-			case constant.CallerFuncKey:
+			case constant.CallerFuncLogKey:
 				sourceLocation[FieldLoggingGoogleapisComSourceLocationFunction] = v
-			case constant.CallerLineKey:
+			case constant.CallerLineLogKey:
 				sourceLocation[FieldLoggingGoogleapisComSourceLocationLine] = v
 			default:
 				data[k] = v

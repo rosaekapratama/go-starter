@@ -23,12 +23,12 @@ func New(ctx context.Context, credentials *google.Credentials) App {
 	}
 	log.Info(ctx, "Google firebase cloud messaging client service is initiated")
 
-	return &AppImpl{
+	return &appImpl{
 		app:             app,
 		messagingClient: messagingClient,
 	}
 }
 
-func (app *AppImpl) GetMessagingClient() MessagingClient {
+func (app *appImpl) GetMessagingClient() MessagingClient {
 	return app.messagingClient
 }

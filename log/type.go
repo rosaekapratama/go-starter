@@ -38,6 +38,6 @@ type Logger interface {
 	WithTraceFields(ctx context.Context) Logger
 }
 
-type LoggerImpl struct {
+type loggerImpl struct {
 	logger logrus.Ext1FieldLogger
 }

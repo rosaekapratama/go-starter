@@ -2,13 +2,15 @@ package context
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"strings"
+
 	"github.com/rosaekapratama/go-starter/constant/str"
 	"github.com/rosaekapratama/go-starter/constant/sym"
 	"github.com/rosaekapratama/go-starter/log"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/metadata"
-	"strings"
 )
 
 const (
@@ -19,6 +21,7 @@ const (
 	fullnameKey       = "fullname"
 	realmKey          = "realm"
 	emailKey          = "email"
+	rolesKey          = "roles"
 )
 
 var (
@@ -47,7 +50,7 @@ func ContextWithTraceParent(parent context.Context, traceparent string) context.
 	spanId := trace.SpanID{}
 	if traceparent != str.Empty {
 		var err error
-		s := strings.Split(traceparent, sym.Dash)
+		s := strings.Split(traceparent, sym.Hyphen)
 		traceId, err = trace.TraceIDFromHex(s[1])
 		if err != nil {
 			log.Warnf(parent, "Failed to get trace ID from traceparent, traceparent=%s, error=%v", traceparent, err)
@@ -77,7 +80,11 @@ func SpanIdFromContext(ctx context.Context) string {
 }
 
 func ContextWithToken(parentContext context.Context, token string) context.Context {
-	return context.WithValue(parentContext, tokenKey, token)
+	return context.WithValue(
+		parentContext,
+		tokenKey,
+		token,
+	)
 }
 
 func TokenFromContext(ctx context.Context) (token string, exists bool) {
@@ -135,23 +142,40 @@ func ContextWithEmail(parentContext context.Context, email string) context.Conte
 	return context.WithValue(parentContext, emailKey, email)
 }
 
-func EmailFromContext(ctx context.Context) (email string, exists bool) {
+func EmailFromContext(ctx context.Context) (roles string, exists bool) {
 	if ctx.Value(emailKey) == nil {
 		return str.Empty, false
 	}
 	return ctx.Value(emailKey).(string), true
 }
 
-func InjectMetadataToContext(ctx context.Context) context.Context {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if ok {
+func RolesFromContext(ctx context.Context) (roles []string, exists bool) {
+	if ctx.Value(rolesKey) == nil {
+		return nil, false
+	}
+	return ctx.Value(rolesKey).([]string), true
+}
+
+func ContextWithRoles(parentContext context.Context, roles []string) context.Context {
+	return context.WithValue(parentContext, rolesKey, roles)
+}
+
+func MetadataContextFromIncomingContext(ctx context.Context) context.Context {
+	md, exists := metadata.FromIncomingContext(ctx)
+	if exists {
 		for _, key := range GetAllManagedKey() {
 			values := md.Get(key)
 			if len(values) > 0 && values[0] != str.Empty {
+				value := values[0]
+				valueBytes, err := base64.StdEncoding.DecodeString(value)
+				if err != nil {
+					log.Errorf(ctx, err, "error on decode base64 GRPC metadata value, key=%s, value=%s", key, value)
+					continue
+				}
 				ctx = context.WithValue(
 					ctx,
 					key,
-					values[0],
+					string(valueBytes),
 				)
 			}
 		}
@@ -159,10 +183,13 @@ func InjectMetadataToContext(ctx context.Context) context.Context {
 	return ctx
 }
 
-func InjectContextToMetadata(ctx context.Context) context.Context {
+func MetadataContextToOutgoingContext(ctx context.Context) context.Context {
 	m := make(map[string]string)
 	for _, key := range GetAllManagedKey() {
-		m[key] = ctx.Value(key).(string)
+		if ctx.Value(key) != nil {
+			value := ctx.Value(key).(string)
+			m[key] = base64.StdEncoding.EncodeToString([]byte(value))
+		}
 	}
 	md := metadata.New(m)
 	return metadata.NewOutgoingContext(ctx, md)

@@ -1,4 +1,4 @@
-# Go Starter #
+# Go Common GG #
 
 Auto configuration and collection of modules for Go REST services powered by Gin web framework and GORM.
 
@@ -26,21 +26,53 @@ app:
 transport:
   client:
     rest:
-      logging: false # Show incoming and outgoing message globally, default is false
+      logging:
+        payloadLogSizeLimit: 2KB
+        stdout: false # Show incoming and outgoing message globally, default is false
+        database: pgsql1 # Write log to database with ID pgsql1
       timeout: 30 # Wait time in second
-      insecureSkipVerify: false
+      insecure: false
     soap:
-      logging: false # Show incoming and outgoing message globally, default is false
+      logging:
+        payloadLogSizeLimit: 2KB
+        stdout: false # Show incoming and outgoing message globally, default is false
+        database: pgsql1 # Write log to database with ID pgsql1
       timeout: 30 # Wait time in second
-      insecureSkipVerify: false
+      insecure: false
+    grpc:
+      connId1:
+        address: localhost:8080
+        timeout: 30
+        insecure: false
+        logging:
+          payloadLogSizeLimit: 2KB
+          stdout: false # Show incoming and outgoing message globally, default is false
+          database: pgsql1 # Write log to database with ID pgsql1
+    ssh:
+      myClientId:
+        address: localhost:22
+        username: admin
+        auth: # Choose 1 between below option, password/privateKey/privateKeyPath
+          password: admin123
+          privateKey: "this should be private key in raw or base64"
+          privateKeyPath: "/tmp/privateKeyLocation"
+        idleTimeout: 5000 # connection will be closed if no operation in millisecond
   server:
     rest:
-      logging: 
+      logging:
+        payloadLogSizeLimit: 2KB
         stdout: false # Show incoming and outgoing message globally, default is false
-        db: pgsql1 # Write log to database with ID pgsql1
+        database: pgsql1 # Write log to database with ID pgsql1
       port:
         http: 9092
-        https: 9443
+    grpc:
+      port:
+        http: 9092
+      logging:
+        payloadLogSizeLimit: 2KB
+        stdout: false # Show incoming and outgoing message globally, default is false
+        database: pgsql1 # Write log to database with ID pgsql1
+      disabled: true # true will disable the GRPC server
 
 cors:
   pattern: "*"
@@ -69,7 +101,6 @@ cors:
     - "Content-Disposition"
   allowCredentials: true # Credentials share
   maxAge: 43200 # Preflight requests cached for 12 hours
-  enabled: true # This will enable CORS function middleware
 
 log:
   # Valid level are
@@ -86,7 +117,7 @@ log:
     maxbackups: 3
     localtime: false
     compress: false
-    enabled: true # This will make the log written to files
+    enable: true
 
 # Choose mode between single or sentinel
 redis:
@@ -191,17 +222,19 @@ google:
     pubsub:
       publisher:
         logging:
+          payloadLogSizeLimit: 2KB
           stdout: false # Show incoming and outgoing message globally, default is false
-          db: pgsql1 # Write log to database with ID pgsql1
+          database: pgsql1 # Write log to database with ID pgsql1
       subscriber:
         logging:
+          payloadLogSizeLimit: 2KB
           stdout: false # Show incoming and outgoing message globally, default is false
-          db: pgsql1 # Write log to database with ID pgsql1
+          database: pgsql1 # Write log to database with ID pgsql1
     oauth2:
       verification:
-        - aud: 3259999.apps.googleusercontent.com
-          email: playground@mymail.gserviceaccount.com
-          sub: "239487549823742"
+        - aud: 32555940559.apps.googleusercontent.com
+          email: playground@gserviceaccount.com
+          sub: "114023262557275904507"
 
 zeebe:
   address: 1fcab5e1-1649-4c0b-ab53-cd4375877dc6.syd-1.zeebe.camunda.io:443
@@ -211,21 +244,26 @@ zeebe:
   authorizationServerURL: https://login.cloud.camunda.io/oauth/token
 
 elasticSearch:
-  addresses:
-    - localhost
-    - 127.0.0.1
-  username: myUser
-  password: myPass
+  default:
+    addresses:
+      - localhost
+      - 127.0.0.1
+    username: myUser
+    password: myPass
+    logging:
+      payloadLogSizeLimit: 2KB
+      stdout: false # Show incoming and outgoing message globally, default is false
+      db: pgsql1 # Write log to database with ID pgsql1
 ```
 
 By default it will read config yaml file located in **conf/app.yaml** in **root folder** of the project.
 
-Config file location can be modified with providing its relative path as an **argument**
+Config file location can be modified with providing its relative path as a **flag argument**
 when executing the binary file.
 
 Example:
 
 ```shell
-my-service-binary my-custom-folder/app.yaml
+my-service-binary --config-path=my-custom-folder/app.yaml
 ```
 

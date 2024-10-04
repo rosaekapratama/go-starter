@@ -5,38 +5,40 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"github.com/rosaekapratama/go-starter/config"
-	"github.com/rosaekapratama/go-starter/constant/headers"
-	"github.com/rosaekapratama/go-starter/constant/integer"
-	"github.com/rosaekapratama/go-starter/constant/location"
-	"github.com/rosaekapratama/go-starter/constant/str"
-	"github.com/rosaekapratama/go-starter/constant/sym"
-	myContext "github.com/rosaekapratama/go-starter/context"
-	"github.com/rosaekapratama/go-starter/healthcheck"
-	"github.com/rosaekapratama/go-starter/keycloak"
-	"github.com/rosaekapratama/go-starter/log"
-	"github.com/rosaekapratama/go-starter/log/constant"
-	"github.com/rosaekapratama/go-starter/log/transport/models"
-	"github.com/rosaekapratama/go-starter/log/transport/repositories"
-	"github.com/rosaekapratama/go-starter/response"
-	"github.com/rosaekapratama/go-starter/utils"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
-	"gorm.io/datatypes"
 	"io"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/inhies/go-bytesize"
+	"github.com/rosaekapratama/go-starter/config"
+	"github.com/rosaekapratama/go-starter/constant/headers"
+	"github.com/rosaekapratama/go-starter/constant/integer"
+	"github.com/rosaekapratama/go-starter/constant/location"
+	"github.com/rosaekapratama/go-starter/constant/str"
+	"github.com/rosaekapratama/go-starter/constant/sym"
+	commonContext "github.com/rosaekapratama/go-starter/context"
+	"github.com/rosaekapratama/go-starter/healthcheck"
+	"github.com/rosaekapratama/go-starter/log"
+	"github.com/rosaekapratama/go-starter/log/constant"
+	"github.com/rosaekapratama/go-starter/log/transport/models"
+	"github.com/rosaekapratama/go-starter/log/transport/repositories"
+	"github.com/rosaekapratama/go-starter/response"
+	"github.com/rosaekapratama/go-starter/utils"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"gorm.io/datatypes"
 )
 
 const (
 	contentTypeApplicationJson = "application/json"
+	realmsPath                 = "realms/"
 )
 
 var (
@@ -46,50 +48,70 @@ var (
 	logRepository repositories.ITransportLogRepository
 )
 
-func logging(c *gin.Context) {
-	// Skip if request is health check
-	isHealthCheck, _ := regexp.MatchString(healthcheck.URLPathRegex, c.Request.URL.Path)
-	if isHealthCheck {
-		return
-	}
-
-	var ctx context.Context
-	var body *string
-	r, err := utils.CloneHttpRequest(c.Request)
-	if err != nil {
-		log.Error(ctx, err, "Failed to clone http request for logging")
-	} else {
-		ctx = r.Context()
-		bodyBytes, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Error(ctx, err, "Failed to read a copy of body request for logging")
+func logging(payloadLogSizeLimit int) func(c *gin.Context) {
+	return func(c *gin.Context) {
+		// Skip if request is health check
+		isHealthCheck, _ := regexp.MatchString(healthcheck.URLPathRegex, c.Request.URL.Path)
+		if isHealthCheck {
+			return
 		}
-		body = utils.StringP(string(bodyBytes))
-		if cfg.Transport.Server.Rest.Logging.Stdout {
-			httpFields := make(map[string]interface{})
-			httpFields[constant.LogTypeFieldKey] = constant.LogTypeRest
-			httpFields[constant.UrlFieldKey] = r.URL
-			httpFields[constant.MethodFieldKey] = r.Method
-			httpFields[constant.IsServerFieldKey] = true
-			httpFields[constant.IsRequestFieldKey] = true
-			httpFields[constant.HeadersFieldKey] = r.Header
-			if body != nil {
-				if len(bodyBytes) > integer.Zero && len(bodyBytes) <= (64*1000) {
-					httpFields[constant.BodyFieldKey] = *body
-				}
+
+		ctx := c.Request.Context()
+		isStdoutLogEnabled := cfg.Transport.Server.Rest.Logging.Stdout
+		databaseLog := cfg.Transport.Server.Rest.Logging.Database
+
+		var clonedReq *http.Request
+		var clearFunc func()
+		var body string
+		var err error
+
+		// http request clone process
+		if isStdoutLogEnabled || databaseLog != str.Empty {
+			clonedReq, clearFunc, err = utils.CloneHttpRequest(c.Request, payloadLogSizeLimit)
+			defer clearFunc()
+			if err != nil {
+				log.Error(ctx, err, "Failed to clone http request for logging")
+				c.Next()
+				return
 			}
-			log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
+
+			bytes, errIf := io.ReadAll(clonedReq.Body)
+			if errIf != nil {
+				err = errIf
+				log.Error(ctx, err, "Failed to read cloned body request for logging")
+				c.Next()
+				return
+			}
+
+			body = string(bytes)
 		}
 
-		if cfg.Transport.Server.Rest.Logging.Database != str.Empty {
+		// write to stdout
+		if isStdoutLogEnabled {
+			log.Trace(ctx, "Start stdout http request log writing")
+			httpFields := make(map[string]interface{})
+			httpFields[constant.LogTypeFieldLogKey] = constant.LogTypeRest
+			httpFields[constant.UrlLogKey] = clonedReq.URL
+			httpFields[constant.MethodLogKey] = clonedReq.Method
+			httpFields[constant.IsServerLogKey] = true
+			httpFields[constant.IsRequestLogKey] = true
+			httpFields[constant.HeadersLogKey] = clonedReq.Header
+			httpFields[constant.BodyLogKey] = body
+			log.WithTraceFields(clonedReq.Context()).WithFields(httpFields).GetLogrusLogger().Info()
+			log.Trace(ctx, "End stdout http request log writing")
+		}
+
+		// write to database
+		if databaseLog != str.Empty {
 			go func(ctx context.Context) {
+				log.Trace(ctx, "Start database http request log writing")
 				restLog, err := json.Marshal(&models.TransportRestLog{
 					IsServer:   true,
 					IsRequest:  true,
-					URL:        fmt.Sprintf("%v", r.URL),
-					Method:     r.Method,
-					Headers:    utils.StringP(fmt.Sprintf("%v", r.Header)),
-					Body:       body,
+					URL:        fmt.Sprintf("%v", clonedReq.URL),
+					Method:     clonedReq.Method,
+					Headers:    utils.StringP(fmt.Sprintf("%v", clonedReq.Header)),
+					Body:       utils.StringP(body),
 					StatusCode: nil,
 				})
 				if err != nil {
@@ -99,68 +121,72 @@ func logging(c *gin.Context) {
 
 				transportLog := &models.TransportLog{
 					ID:        uuid.New(),
-					TraceID:   myContext.TraceIdFromContext(ctx),
-					SpanID:    myContext.SpanIdFromContext(ctx),
+					TraceID:   commonContext.TraceIdFromContext(ctx),
+					SpanID:    commonContext.SpanIdFromContext(ctx),
 					Type:      constant.LogTypeRest,
 					Log:       datatypes.JSON(restLog),
 					ProcessDT: time.Now().In(location.AsiaJakarta),
 					ProcessBy: config.Instance.GetObject().App.Name,
 				}
 				logRepository.Save(ctx, transportLog)
-			}(myContext.NewContextFromTraceParent(ctx))
-		}
-	}
-
-	c.Next()
-	i := c.Writer.(*WriterInterceptor)
-
-	if cfg.Transport.Server.Rest.Logging.Stdout {
-		httpFields := make(map[string]interface{})
-		httpFields[constant.LogTypeFieldKey] = constant.LogTypeRest
-		httpFields[constant.UrlFieldKey] = r.URL
-		httpFields[constant.MethodFieldKey] = r.Method
-		httpFields[constant.IsServerFieldKey] = true
-		httpFields[constant.IsRequestFieldKey] = false
-		httpFields[constant.StatusCodeFieldKey] = i.status
-		httpFields[constant.HeadersFieldKey] = i.ResponseWriter.Header()
-		if len(i.body) > integer.Zero && len(i.body) <= (64*1000) {
-			httpFields[constant.BodyFieldKey] = string(i.body)
-		}
-		log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
-	}
-
-	if cfg.Transport.Server.Rest.Logging.Database != str.Empty {
-		if len(i.body) > integer.Zero {
-			body = utils.StringP(string(i.body))
+				log.Trace(ctx, "End database http request log writing")
+			}(commonContext.NewContextFromTraceParent(ctx))
 		}
 
-		go func(ctx context.Context) {
-			restLog, marshalErr := json.Marshal(&models.TransportRestLog{
-				IsServer:   true,
-				IsRequest:  false,
-				URL:        fmt.Sprintf("%v", r.URL),
-				Method:     r.Method,
-				Headers:    utils.StringP(fmt.Sprintf("%v", i.ResponseWriter.Header())),
-				Body:       body,
-				StatusCode: utils.StringP(strconv.Itoa(i.status)),
-			})
-			if marshalErr != nil {
-				log.Error(ctx, marshalErr, "failed to marshal REST response log to json")
-				return
+		c.Next()
+		i := c.Writer.(*WriterInterceptor)
+
+		// write to stdout
+		if isStdoutLogEnabled {
+			log.Trace(ctx, "Start stdout http response log writing")
+			httpFields := make(map[string]interface{})
+			httpFields[constant.LogTypeFieldLogKey] = constant.LogTypeRest
+			httpFields[constant.UrlLogKey] = clonedReq.URL
+			httpFields[constant.MethodLogKey] = clonedReq.Method
+			httpFields[constant.IsServerLogKey] = true
+			httpFields[constant.IsRequestLogKey] = false
+			httpFields[constant.StatusCodeLogKey] = i.status
+			httpFields[constant.HeadersLogKey] = i.ResponseWriter.Header()
+			httpFields[constant.BodyLogKey] = string(i.body)
+			log.WithTraceFields(clonedReq.Context()).WithFields(httpFields).GetLogrusLogger().Info()
+			log.Trace(ctx, "End stdout http response log writing")
+		}
+
+		if databaseLog != str.Empty {
+			if len(i.body) > integer.Zero {
+				body = string(i.body)
 			}
 
-			transportLog := &models.TransportLog{
-				ID:           uuid.New(),
-				TraceID:      myContext.TraceIdFromContext(ctx),
-				SpanID:       myContext.SpanIdFromContext(ctx),
-				Type:         constant.LogTypeRest,
-				Log:          datatypes.JSON(restLog),
-				ErrorMessage: utils.StringP(i.response.Description()),
-				ProcessDT:    time.Now().In(location.AsiaJakarta),
-				ProcessBy:    config.Instance.GetObject().App.Name,
-			}
-			logRepository.Save(ctx, transportLog)
-		}(myContext.NewContextFromTraceParent(ctx))
+			go func(ctx context.Context) {
+				log.Trace(ctx, "Start database http response log writing")
+				restLog, marshalErr := json.Marshal(&models.TransportRestLog{
+					IsServer:   true,
+					IsRequest:  false,
+					URL:        fmt.Sprintf("%v", clonedReq.URL),
+					Method:     clonedReq.Method,
+					Headers:    utils.StringP(fmt.Sprintf("%v", i.ResponseWriter.Header())),
+					Body:       utils.StringP(body),
+					StatusCode: utils.StringP(strconv.Itoa(i.status)),
+				})
+				if marshalErr != nil {
+					log.Error(ctx, marshalErr, "failed to marshal REST response log to json")
+					return
+				}
+
+				transportLog := &models.TransportLog{
+					ID:           uuid.New(),
+					TraceID:      commonContext.TraceIdFromContext(ctx),
+					SpanID:       commonContext.SpanIdFromContext(ctx),
+					Type:         constant.LogTypeRest,
+					Log:          datatypes.JSON(restLog),
+					ErrorMessage: utils.StringP(i.response.Description()),
+					ProcessDT:    time.Now().In(location.AsiaJakarta),
+					ProcessBy:    config.Instance.GetObject().App.Name,
+				}
+				logRepository.Save(ctx, transportLog)
+				log.Trace(ctx, "End database http response log writing")
+			}(commonContext.NewContextFromTraceParent(ctx))
+		}
 	}
 }
 
@@ -223,24 +249,26 @@ func extractTraceParent(c *gin.Context) {
 	traceparent := strings.TrimSpace(c.GetHeader(headers.Traceparent))
 	if traceparent != str.Empty {
 		// Override request context with new context if traceparent is exists
-		c.Request = c.Request.WithContext(myContext.ContextWithTraceParent(c.Request.Context(), traceparent))
+		c.Request = c.Request.WithContext(commonContext.ContextWithTraceParent(c.Request.Context(), traceparent))
 	}
 }
 
-func interceptResponse(c *gin.Context) {
-	r := c.Request
-	i := NewWriterInterceptor(r.Context(), c.Writer)
-	c.Writer = i
-	c.Next()
-	contentType := strings.ToLower(strings.Split(i.ResponseWriter.Header().Get(headers.ContentType), sym.SemiColon)[0])
-	if contentType == str.Empty {
-		i.ResponseWriter.Header().Set(headers.ContentType, contentTypeApplicationJson)
-		contentType = contentTypeApplicationJson
-	}
-	if !i.IsWritten && contentType == contentTypeApplicationJson {
-		_, err := i.Write(nil)
-		if err != nil {
-			log.Error(r.Context(), err)
+func interceptResponse(payloadLogSizeLimit int) func(c *gin.Context) {
+	return func(c *gin.Context) {
+		r := c.Request
+		i := NewWriterInterceptor(r.Context(), c.Writer, payloadLogSizeLimit)
+		c.Writer = i
+		c.Next()
+		contentType := strings.ToLower(strings.Split(i.ResponseWriter.Header().Get(headers.ContentType), sym.SemiColon)[0])
+		if contentType == str.Empty {
+			i.ResponseWriter.Header().Set(headers.ContentType, contentTypeApplicationJson)
+			contentType = contentTypeApplicationJson
+		}
+		if !i.IsWritten && contentType == contentTypeApplicationJson {
+			_, err := i.Write(nil)
+			if err != nil {
+				log.Error(r.Context(), err)
+			}
 		}
 	}
 }
@@ -280,14 +308,14 @@ func injectAuthContext(c *gin.Context) {
 		} else {
 			// Get the username from decoded value and set to context
 			username := strings.Split(string(bs), sym.Colon)[integer.Zero]
-			ctx = myContext.ContextWithUsername(ctx, username)
+			ctx = commonContext.ContextWithUsername(ctx, username)
 
 			// Override request context with new context
 			c.Request = c.Request.WithContext(ctx)
 		}
 	} else if auth != str.Empty && strings.HasPrefix(auth, headers.BearerTokenPrefix) {
 		token := strings.TrimPrefix(auth, headers.BearerTokenPrefix)
-		ctx = myContext.ContextWithToken(ctx, token)
+		ctx = commonContext.ContextWithToken(ctx, token)
 
 		// Override request context with new context
 		c.Request = c.Request.WithContext(ctx)
@@ -296,118 +324,7 @@ func injectAuthContext(c *gin.Context) {
 	}
 }
 
-func InjectKeycloakContext(additionalClaims ...string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// skip if request is health check
-		if isHealthCheckPath(c) {
-			c.Next()
-			return
-		}
-
-		// start middleware logic
-		ctx := c.Request.Context()
-		w := c.Writer
-
-		// get keycloak token from context which already set by injectAuthContext function
-		if tokenStr, ok := myContext.TokenFromContext(ctx); ok {
-
-			// Split JWT into header, payload, and signature
-			parts := strings.Split(tokenStr, ".")
-			payloadBase64 := parts[1]
-
-			// Decode payload from base64
-			payloadBytes, err := base64.RawURLEncoding.DecodeString(payloadBase64)
-			if err != nil {
-				log.Error(ctx, err, "Error decoding token payload")
-				SetResponse(w, response.GeneralError)
-				c.Abort()
-				return
-			}
-
-			// Parse JSON payload to access claims
-			var claims map[string]interface{}
-			if err := json.Unmarshal(payloadBytes, &claims); err != nil {
-				log.Error(ctx, err, "Error parsing token JSON payload")
-				SetResponse(w, response.GeneralError)
-				c.Abort()
-				return
-			}
-
-			// set common token claim to context
-			// set sub claim to context if exists
-			if v, ok := claims[keycloak.ClaimSub]; ok {
-				sc := v.(string)
-				if sc == str.Empty {
-					log.Warn(ctx, "Unable to set context, sub claim is empty")
-				} else {
-					ctx = myContext.ContextWithUserId(ctx, sc)
-				}
-			} else {
-				log.Warn(ctx, "Unable to set context, missing sub claim")
-			}
-
-			// set preferred_username claim to context if exists
-			var puc string
-			if v, ok := claims[keycloak.ClaimPreferredUsername]; ok {
-				puc = v.(string)
-				if puc == str.Empty {
-					log.Warn(ctx, "Unable to set context, preferred_username claim is empty")
-				} else {
-					ctx = myContext.ContextWithUsername(ctx, puc)
-				}
-			} else {
-				log.Warn(ctx, "Unable to set context, missing preferred_username claim")
-			}
-
-			// set name claim to context if exists, or set with username if empty
-			var nc string
-			if v, ok := claims[keycloak.ClaimName]; ok {
-				nc = v.(string)
-				if nc == str.Empty {
-					log.Trace(ctx, "Name claim is empty, set context using preferred_username claim value instead")
-					nc = puc
-				}
-			} else {
-				log.Trace(ctx, "Missing name claim, set context using preferred_username claim value instead")
-				nc = puc
-			}
-			ctx = myContext.ContextWithFullName(ctx, nc)
-
-			// set email claim to context if exists
-			if v, ok := claims[keycloak.ClaimEmail]; ok {
-				ec := v.(string)
-				if ec == str.Empty {
-					log.Trace(ctx, "Unable to set context, email claim is empty")
-				} else {
-					ctx = myContext.ContextWithEmail(ctx, ec)
-				}
-			} else {
-				log.Trace(ctx, "Unable to set context, missing email claim")
-			}
-
-			// set custom provided claim to context if exists
-			for _, additionalClaim := range additionalClaims {
-				if v, ok := claims[additionalClaim]; ok {
-					ctx = context.WithValue(
-						ctx,
-						additionalClaim,
-						v,
-					)
-					myContext.AddManagedKey(additionalClaim)
-				} else {
-					log.Tracef(ctx, "Unable to set context, missing %s claim", additionalClaim)
-				}
-			}
-
-			// override request context with new context
-			c.Request = c.Request.WithContext(ctx)
-		} else {
-			log.Trace(ctx, "Unable to set context, missing keycloak token, path=%s, method=%s", c.Request.URL.Path, c.Request.Method)
-		}
-	}
-}
-
-func Init(_ context.Context, config config.Config, newLogRepository repositories.ITransportLogRepository) {
+func Init(ctx context.Context, config config.Config, newLogRepository repositories.ITransportLogRepository) {
 	logRepository = newLogRepository
 
 	// Set gin mode
@@ -415,13 +332,20 @@ func Init(_ context.Context, config config.Config, newLogRepository repositories
 	gin.SetMode(cfg.App.Mode)
 	Router = gin.New()
 
+	// Get rest server payload limit config for logging
+	_payloadLogSizeLimit, err := bytesize.Parse(config.GetObject().Transport.Server.Rest.Logging.PayloadLogSizeLimit)
+	if err != nil {
+		log.Fatal(ctx, err, "Invalid value of REST server payloadLogSizeLimit config")
+	}
+	payloadLogSizeLimit := int(_payloadLogSizeLimit)
+
 	// List of mandatory middleware
 	Router.Use(
 		extractTraceParent,
 		otelgin.Middleware(cfg.App.Name),
-		logging,
+		logging(payloadLogSizeLimit),
 		enableCors(),
-		interceptResponse,
+		interceptResponse(payloadLogSizeLimit),
 		gin.Recovery(),
 		injectTraceParent,
 		injectAuthContext,

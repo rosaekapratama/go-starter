@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-resty/resty/v2"
+	"github.com/inhies/go-bytesize"
 	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/constant/headers"
 	"github.com/rosaekapratama/go-starter/constant/headers/contenttype"
-	"github.com/rosaekapratama/go-starter/constant/integer"
 	"github.com/rosaekapratama/go-starter/constant/str"
 	"github.com/rosaekapratama/go-starter/log"
 	"github.com/rosaekapratama/go-starter/log/constant"
@@ -21,24 +21,31 @@ import (
 )
 
 var (
-	_config       config.Config
-	Manager       IManager
-	LogRepository repositories.ITransportLogRepository
+	_config             config.Config
+	Manager             IManager
+	LogRepository       repositories.ITransportLogRepository
+	payloadLogSizeLimit int
 )
 
 func Init(ctx context.Context, config config.Config, restLogRepository repositories.ITransportLogRepository) {
 	_config = config
 	logStdout := _config.GetObject().Transport.Client.Soap.Logging.Stdout
 	logDB := _config.GetObject().Transport.Client.Soap.Logging.Database
+	_payloadLogSizeLimit, err := bytesize.Parse(_config.GetObject().Transport.Client.Soap.Logging.PayloadLogSizeLimit)
+	if err != nil {
+		log.Fatal(ctx, err, "Invalid value of SOAP client payloadLogSizeLimit config")
+	}
+	payloadLogSizeLimit = int(_payloadLogSizeLimit)
+
 	client, err := newClient(ctx,
 		WithLogging(logStdout, logDB),
 		WithTimeout(time.Duration(_config.GetObject().Transport.Client.Rest.Timeout)*time.Second),
-		WithInsecureSkipVerify(_config.GetObject().Transport.Client.Rest.InsecureSkipVerify))
+		WithInsecureSkipVerify(_config.GetObject().Transport.Client.Rest.Insecure))
 	if err != nil {
 		log.Fatal(ctx, err, "Failed to init default rest client")
 		return
 	}
-	Manager = &ManagerImpl{
+	Manager = &managerImpl{
 		defaultClient: client,
 	}
 
@@ -49,55 +56,55 @@ func Init(ctx context.Context, config config.Config, restLogRepository repositor
 
 func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Log the request details
+	var clonedReq *http.Request
+	var clearFunc func()
+	var err error
 	if t.logging != nil {
-		r, err := utils.CloneHttpRequest(req)
+		clonedReq, clearFunc, err = utils.CloneHttpRequest(req, payloadLogSizeLimit)
+		defer clearFunc()
 		if err != nil {
 			log.Error(req.Context(), err, "failed to clone http request for soap logging")
 		}
 
 		if t.logging.Stdout {
-			go preStdoutLogging(r)
+			go preStdoutLogging(clonedReq)
 		}
 		if t.logging.Database != str.Empty {
-			go preDatabaseLogging(r)
+			go preDatabaseLogging(clonedReq)
 		}
 	}
 
 	// Perform the actual HTTP request
 	res, err := t.transport.RoundTrip(req)
 	if err != nil && t.logging != nil {
-		r, errClone := utils.CloneHttpRequest(req)
-		if errClone != nil {
-			log.Error(req.Context(), errClone, "failed to clone http error for soap logging")
-		}
-
 		if t.logging.Stdout {
-			go errorStdoutLogging(r, err)
+			go errorStdoutLogging(clonedReq, err)
 		}
 		if t.logging.Database != str.Empty {
-			go errorDatabaseLogging(r, err)
+			go errorDatabaseLogging(clonedReq, err)
 		}
 	}
 
 	// Log the response details
 	if res != nil && t.logging != nil {
-		r, err := utils.CloneHttpResponse(res)
+		clonedRes, clearFunc, err := utils.CloneHttpResponse(res, payloadLogSizeLimit)
+		defer clearFunc()
 		if err != nil {
 			log.Error(req.Context(), err, "failed to clone http response for soap logging")
 		}
 
 		if t.logging.Stdout {
-			go postStdoutLogging(r)
+			go postStdoutLogging(clonedRes)
 		}
 		if t.logging.Database != str.Empty {
-			go postDatabaseLogging(r)
+			go postDatabaseLogging(clonedRes)
 		}
 	}
 
 	return res, err
 }
 
-func (m *ManagerImpl) GetDefaultClient() *Client {
+func (m *managerImpl) GetDefaultClient() *Client {
 	return m.defaultClient
 }
 
@@ -117,7 +124,7 @@ func newClient(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	return client, nil
 }
 
-func (m *ManagerImpl) NewClient(ctx context.Context, opts ...ClientOption) (*Client, error) {
+func (m *managerImpl) NewClient(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	return newClient(ctx, opts...)
 }
 
@@ -142,13 +149,13 @@ func (c *Client) Call(ctx context.Context, wsdlAddress string, method string, pa
 
 func preStdoutLogging(r *http.Request) {
 	httpFields := make(map[string]interface{})
-	httpFields[constant.LogTypeFieldKey] = constant.LogTypeSoap
-	httpFields[constant.UrlFieldKey] = r.URL
-	httpFields[constant.SoapActionFieldKey] = r.Header.Get(headers.SOAPAction)
-	httpFields[constant.MethodFieldKey] = r.Method
-	httpFields[constant.IsServerFieldKey] = false
-	httpFields[constant.IsRequestFieldKey] = true
-	httpFields[constant.HeadersFieldKey] = r.Header
+	httpFields[constant.LogTypeFieldLogKey] = constant.LogTypeSoap
+	httpFields[constant.UrlLogKey] = r.URL
+	httpFields[constant.SoapActionLogKey] = r.Header.Get(headers.SOAPAction)
+	httpFields[constant.MethodLogKey] = r.Method
+	httpFields[constant.IsServerLogKey] = false
+	httpFields[constant.IsRequestLogKey] = true
+	httpFields[constant.HeadersLogKey] = r.Header
 	if r.Body != nil {
 		var body string
 		contentType := r.Header.Get(headers.ContentType)
@@ -162,8 +169,12 @@ func preStdoutLogging(r *http.Request) {
 		} else {
 			body = fmt.Sprintf("%v", r.Body)
 		}
-		if len(body) > integer.Zero && len(body) <= (64*1000) {
-			httpFields[constant.BodyFieldKey] = body
+		if len(body) > payloadLogSizeLimit {
+			httpFields[constant.BodyLogKey] = body[:payloadLogSizeLimit]
+		} else if len(body) > 0 {
+			httpFields[constant.BodyLogKey] = body
+		} else {
+			httpFields[constant.BodyLogKey] = str.Empty
 		}
 	}
 	log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
@@ -171,14 +182,14 @@ func preStdoutLogging(r *http.Request) {
 
 func postStdoutLogging(r *http.Response) {
 	httpFields := make(map[string]interface{})
-	httpFields[constant.LogTypeFieldKey] = constant.LogTypeSoap
-	httpFields[constant.UrlFieldKey] = r.Request.URL
-	httpFields[constant.SoapActionFieldKey] = r.Request.Header.Get(headers.SOAPAction)
-	httpFields[constant.MethodFieldKey] = r.Request.Method
-	httpFields[constant.IsServerFieldKey] = false
-	httpFields[constant.IsRequestFieldKey] = false
-	httpFields[constant.StatusCodeFieldKey] = r.StatusCode
-	httpFields[constant.HeadersFieldKey] = r.Header
+	httpFields[constant.LogTypeFieldLogKey] = constant.LogTypeSoap
+	httpFields[constant.UrlLogKey] = r.Request.URL
+	httpFields[constant.SoapActionLogKey] = r.Request.Header.Get(headers.SOAPAction)
+	httpFields[constant.MethodLogKey] = r.Request.Method
+	httpFields[constant.IsServerLogKey] = false
+	httpFields[constant.IsRequestLogKey] = false
+	httpFields[constant.StatusCodeLogKey] = r.StatusCode
+	httpFields[constant.HeadersLogKey] = r.Header
 	if r.Body != nil {
 		var body string
 		contentType := r.Header.Get(headers.ContentType)
@@ -192,8 +203,12 @@ func postStdoutLogging(r *http.Response) {
 		} else {
 			body = fmt.Sprintf("%v", r.Body)
 		}
-		if len(body) > integer.Zero && len(body) <= (64*1000) {
-			httpFields[constant.BodyFieldKey] = body
+		if len(body) > payloadLogSizeLimit {
+			httpFields[constant.BodyLogKey] = body[:payloadLogSizeLimit]
+		} else if len(body) > 0 {
+			httpFields[constant.BodyLogKey] = body
+		} else {
+			httpFields[constant.BodyLogKey] = str.Empty
 		}
 	}
 	log.WithTraceFields(r.Request.Context()).WithFields(httpFields).GetLogrusLogger().Info()
@@ -205,13 +220,13 @@ func errorStdoutLogging(r *http.Request, err error) {
 		// v.Err contains the original error
 
 		httpFields := make(map[string]interface{})
-		httpFields[constant.LogTypeFieldKey] = constant.LogTypeRest
-		httpFields[constant.UrlFieldKey] = r.URL
-		httpFields[constant.SoapActionFieldKey] = r.Header.Get(headers.SOAPAction)
-		httpFields[constant.MethodFieldKey] = r.Method
-		httpFields[constant.IsServerFieldKey] = false
-		httpFields[constant.IsRequestFieldKey] = false
-		httpFields[constant.ErrorFieldKey] = v.Error()
+		httpFields[constant.LogTypeFieldLogKey] = constant.LogTypeRest
+		httpFields[constant.UrlLogKey] = r.URL
+		httpFields[constant.SoapActionLogKey] = r.Header.Get(headers.SOAPAction)
+		httpFields[constant.MethodLogKey] = r.Method
+		httpFields[constant.IsServerLogKey] = false
+		httpFields[constant.IsRequestLogKey] = false
+		httpFields[constant.ErrorLogKey] = v.Error()
 		log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Error()
 	}
 	// Log the error, increment a metric, etc...

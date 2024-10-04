@@ -173,7 +173,7 @@ func handleErr(ctx context.Context, err error, message string) {
 func Trace(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, *SpanWrapper) {
 	// Get parent span if any
 	sc := trace.SpanContextFromContext(ctx)
-	ctx = context.WithValue(ctx, myLog.SpanParentIdKey, sc.SpanID().String())
+	ctx = context.WithValue(ctx, myLog.SpanParentIdLogKey, sc.SpanID().String())
 
 	var span trace.Span
 	if isOtelConfigMissingOrDisabled(cfg) {

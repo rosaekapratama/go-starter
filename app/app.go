@@ -2,6 +2,11 @@ package app
 
 import (
 	"context"
+	"os"
+	"runtime/debug"
+	"strings"
+	"sync"
+
 	"github.com/rosaekapratama/go-starter/avro"
 	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/constant/integer"
@@ -14,6 +19,7 @@ import (
 	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/subscriber"
 	"github.com/rosaekapratama/go-starter/google/cloud/scheduler"
 	"github.com/rosaekapratama/go-starter/google/cloud/storage"
+	"github.com/rosaekapratama/go-starter/google/drive"
 	"github.com/rosaekapratama/go-starter/google/firebase"
 	"github.com/rosaekapratama/go-starter/log"
 	"github.com/rosaekapratama/go-starter/log/transport/repositories"
@@ -28,9 +34,6 @@ import (
 	"github.com/rosaekapratama/go-starter/transport/soapclient"
 	"github.com/rosaekapratama/go-starter/zeebe"
 	"github.com/stretchr/testify/mock"
-	"os"
-	"strings"
-	"sync"
 )
 
 var (
@@ -39,6 +42,18 @@ var (
 
 func init() {
 	ctx := context.Background()
+
+	// Retrieve the main module's information
+	info, ok := debug.ReadBuildInfo()
+	if ok {
+		// Print the version of a specific module (e.g., gin-gonic/gin)
+		for _, mod := range info.Deps {
+			if mod.Path == "github.com/rosaekapratama/go-starter" {
+				log.Infof(ctx, "go-common-gg version: %s", mod.Version)
+				break
+			}
+		}
+	}
 
 	args := os.Args
 	if strings.HasSuffix(args[0], ".test") {
@@ -81,13 +96,15 @@ func initRun(ctx context.Context) {
 	// Init google package
 	if credentials != nil {
 		firebaseApp := firebase.New(ctx, credentials)
-		oauthClient := oauth.New(ctx)
-		pubsubClient := pubsub.New(ctx, credentials)
+		oauthClient := oauth.NewClient(ctx)
+		pubsubClient := pubsub.NewClient(ctx, credentials)
 		subscriber.Init(pubsubClient)
 		scheduler.Init(ctx, credentials)
 		schedulerService := scheduler.Service
 		storage.Init(ctx, credentials)
 		storageClient := storage.Client
+		drive.Init(ctx, credentials)
+		driveService := drive.Service
 		google.Init(
 			ctx,
 			credentials,
@@ -96,7 +113,9 @@ func initRun(ctx context.Context) {
 			oauthClient,
 			pubsubClient,
 			schedulerService,
-			storageClient)
+			storageClient,
+			driveService,
+		)
 	}
 
 	// Init log package
@@ -111,41 +130,65 @@ func initRun(ctx context.Context) {
 	// Init database package
 	database.Init(ctx, configInstance)
 
-	// Init elasticsearch package
-	elasticsearch.Init(ctx, configInstance)
-
 	// Init redis package
 	redis.Init(ctx, configInstance)
 
 	// Init zeebe package
 	zeebe.Init(ctx, configInstance)
 
-	// Init rest logging repository
-	var restLogRepository repositories.ITransportLogRepository
-	dbLog := configInstance.GetObject().Transport.Server.Rest.Logging.Database
-	if dbLog != str.Empty {
-		DB, _, err := database.Manager.DB(ctx, dbLog)
+	// Init server rest logging repository
+	var serverRestLogRepository repositories.ITransportLogRepository
+	dbLogRestServer := configInstance.GetObject().Transport.Server.Rest.Logging.Database
+	if dbLogRestServer != str.Empty {
+		DB, _, err := database.Manager.DB(ctx, dbLogRestServer)
 		if err != nil {
-			log.Fatalf(ctx, err, "Failed to find database ID '%s'", dbLog)
+			log.Fatalf(ctx, err, "Failed to find database ID '%s'", dbLogRestServer)
 			return
 		}
-		restLogRepository = repositories.NewTransportLogRepository(DB)
+		serverRestLogRepository = repositories.NewTransportLogRepository(DB)
+	}
+
+	// Init client rest logging repository
+	var clientRestLogRepository repositories.ITransportLogRepository
+	dbLogRestClient := configInstance.GetObject().Transport.Client.Rest.Logging.Database
+	if dbLogRestClient != str.Empty {
+		DB, _, err := database.Manager.DB(ctx, dbLogRestClient)
+		if err != nil {
+			log.Fatalf(ctx, err, "Failed to find database ID '%s'", dbLogRestClient)
+			return
+		}
+		clientRestLogRepository = repositories.NewTransportLogRepository(DB)
+	}
+
+	// Init client soap logging repository
+	var clientSoapLogRepository repositories.ITransportLogRepository
+	dbLogSoapClient := configInstance.GetObject().Transport.Client.Soap.Logging.Database
+	if dbLogSoapClient != str.Empty {
+		DB, _, err := database.Manager.DB(ctx, dbLogSoapClient)
+		if err != nil {
+			log.Fatalf(ctx, err, "Failed to find database ID '%s'", dbLogSoapClient)
+			return
+		}
+		clientSoapLogRepository = repositories.NewTransportLogRepository(DB)
 	}
 
 	// Init SOAP client
-	soapclient.Init(ctx, configInstance, restLogRepository)
+	soapclient.Init(ctx, configInstance, clientSoapLogRepository)
 
 	// Init REST client
-	restclient.Init(ctx, configInstance, restLogRepository)
+	restclient.Init(ctx, configInstance, clientRestLogRepository)
 
 	// Init REST server
-	restserver.Init(ctx, configInstance, restLogRepository)
+	restserver.Init(ctx, configInstance, serverRestLogRepository)
 
 	// Init GRPC server
 	grpcserver.Init(ctx, configInstance)
 
 	// Init GRPC client
 	grpcclient.Init(ctx, configInstance)
+
+	// Init elasticsearch package
+	elasticsearch.Init(ctx, configInstance)
 }
 
 func Run() {

@@ -25,8 +25,8 @@ type timeoutClientOption struct {
 
 func (o *loggingOption) Apply(_ context.Context, client *Client) error {
 	client.logging = &clientLogging{
-		Stdout:   o.stdout,
-		Database: o.database,
+		stdout:   o.stdout,
+		database: o.database,
 	}
 	return nil
 }

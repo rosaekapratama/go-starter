@@ -1,7 +1,12 @@
 package config
 
 import (
+	"flag"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
 	"github.com/fatih/structs"
 	"github.com/gin-gonic/gin"
 	"github.com/orandin/lumberjackrus"
@@ -12,9 +17,6 @@ import (
 	"github.com/rosaekapratama/go-starter/response"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
-	"os"
-	"strconv"
-	"strings"
 )
 
 const (
@@ -38,16 +40,22 @@ func init() {
 
 // Init Set config object from file path and store it to singleton
 func Init() {
-	// Get file path from argument
-	// set default if not exists
-	var filePath string
-	args := os.Args
-	if len(args) < 2 {
-		filePath = defaultFilePath
-	} else {
-		filePath = args[1]
+	// Get file path from env var
+	filePath := os.Getenv("CONFIG_PATH")
+
+	// If not found then try to get from flag
+	if filePath == str.Empty {
+		flagFilePath := flag.String("config-path", "", "")
+		flag.Parse()
+		if flagFilePath != nil && *flagFilePath != str.Empty {
+			filePath = *flagFilePath
+		}
 	}
 
+	// If still not found then set to default path
+	if filePath == str.Empty {
+		filePath = defaultFilePath
+	}
 	bytes, err := os.ReadFile(filePath)
 	if err != nil {
 		logger.Fatal(errReadingConfigFile, err)
@@ -55,38 +63,49 @@ func Init() {
 	}
 
 	// Set default value for all fields
+	payloadLogSizeLimit := "2KB"
 	o := &Object{
 		App: &AppConfig{Mode: gin.DebugMode},
 		Transport: &TransportConfig{
 			Client: &ClientConfig{
 				Rest: &RestClientConfig{
-					Logging:            &RestClientLoggingConfig{},
-					Timeout:            60,
-					InsecureSkipVerify: false,
+					Logging: &RestClientLoggingConfig{
+						PayloadLogSizeLimit: payloadLogSizeLimit,
+					},
+					Timeout:  60,
+					Insecure: false,
 				},
 				Soap: &SoapClientConfig{
-					Logging:            &SoapClientLoggingConfig{},
-					Timeout:            60,
-					InsecureSkipVerify: false,
+					Logging: &SoapClientLoggingConfig{
+						PayloadLogSizeLimit: payloadLogSizeLimit,
+					},
+					Timeout:  60,
+					Insecure: false,
 				},
 			},
 			Server: &ServerConfig{
 				Rest: &RestServerConfig{
-					Logging: &RestServerLoggingConfig{},
+					Logging: &RestServerLoggingConfig{
+						PayloadLogSizeLimit: payloadLogSizeLimit,
+					},
 					Port: &HttpHttpsPortConfig{
 						Http:  defaultHTTPRESTPort,
 						Https: defaultHTTPSRESTPort,
 					},
 				},
 				Grpc: &GrpcServerConfig{
-					Logging: &GrpcServerLoggingConfig{},
+					Logging: &GrpcServerLoggingConfig{
+						PayloadLogSizeLimit: payloadLogSizeLimit,
+					},
 					Port: &HttpHttpsPortConfig{
 						Http:  defaultHTTPGRPCPort,
 						Https: defaultHTTPSGRPCPort,
 					},
 				},
 				GraphQL: &GraphQLServerConfig{
-					Logging: &GraphQLServerLoggingConfig{},
+					Logging: &GraphQLServerLoggingConfig{
+						PayloadLogSizeLimit: payloadLogSizeLimit,
+					},
 					Port: &HttpHttpsPortConfig{
 						Http:  defaultHTTPGraphQLPort,
 						Https: defaultHTTPSGraphQLPort,
@@ -131,10 +150,14 @@ func Init() {
 			Cloud: &GoogleCloudConfig{
 				Pubsub: &GoogleCloudPubsubConfig{
 					Publisher: &GoogleCloudPubsubPublisherConfig{
-						Logging: &GoogleCloudPubsubPublisherLoggingConfig{},
+						Logging: &GoogleCloudPubsubPublisherLoggingConfig{
+							PayloadLogSizeLimit: payloadLogSizeLimit,
+						},
 					},
 					Subscriber: &GoogleCloudPubsubSubscriberConfig{
-						Logging: &GoogleCloudPubsubSubscriberLoggingConfig{},
+						Logging: &GoogleCloudPubsubSubscriberLoggingConfig{
+							PayloadLogSizeLimit: payloadLogSizeLimit,
+						},
 					},
 				},
 			},
@@ -191,13 +214,14 @@ func Init() {
 		return
 	}
 
-	Instance = &ConfigImpl{
-		o: o,
-		m: m,
+	Instance = &configImpl{
+		configFilePath: filePath,
+		o:              o,
+		m:              m,
 	}
 }
 
-func (c *ConfigImpl) GetObject() *Object {
+func (c *configImpl) GetObject() *Object {
 	return c.o
 }
 
@@ -220,7 +244,7 @@ func getVal(key string, m map[string]interface{}) interface{} {
 
 // GetString use dot to get value from nested key
 // ex: keycloak.address
-func (c *ConfigImpl) GetString(key string) (string, error) {
+func (c *configImpl) GetString(key string) (string, error) {
 	v := getVal(key, c.m)
 	if v == nil {
 		return str.Empty, nil
@@ -238,7 +262,7 @@ func (c *ConfigImpl) GetString(key string) (string, error) {
 	}
 }
 
-func (c *ConfigImpl) GetStringAndThrowFatalIfEmpty(key string) string {
+func (c *configImpl) GetStringAndThrowFatalIfEmpty(key string) string {
 	v, err := c.GetString(key)
 	if err != nil {
 		logger.Fatal(fmt.Sprintf(errFailedToGetConfig, key, err.Error()))
@@ -252,7 +276,7 @@ func (c *ConfigImpl) GetStringAndThrowFatalIfEmpty(key string) string {
 }
 
 // GetInt use dot to get value from nested key, ex: keycloak.address
-func (c *ConfigImpl) GetInt(key string) (int, error) {
+func (c *configImpl) GetInt(key string) (int, error) {
 	v := getVal(key, c.m)
 	if v == nil {
 		return integer.Zero, response.ConfigNotFound
@@ -278,7 +302,7 @@ func (c *ConfigImpl) GetInt(key string) (int, error) {
 }
 
 // GetBool use dot to get value from nested key, ex: keycloak.address
-func (c *ConfigImpl) GetBool(key string) (bool, error) {
+func (c *configImpl) GetBool(key string) (bool, error) {
 	v := getVal(key, c.m)
 	if v == nil {
 		return false, response.ConfigNotFound
@@ -307,7 +331,7 @@ func (c *ConfigImpl) GetBool(key string) (bool, error) {
 }
 
 // GetSlice use dot to get value from nested key, ex: keycloak.address
-func (c *ConfigImpl) GetSlice(key string) ([]interface{}, error) {
+func (c *configImpl) GetSlice(key string) ([]interface{}, error) {
 	v := getVal(key, c.m)
 	if v == nil {
 		return nil, nil
@@ -329,4 +353,17 @@ func (c *LogConfig) GetParentPath() string {
 		return str.Empty
 	}
 	return filePath[:i+1]
+}
+
+func (c *configImpl) GetRaw() (bytes []byte, err error) {
+	bytes, err = os.ReadFile(c.configFilePath)
+	if err != nil {
+		logger.Println(errReadingConfigFile, err)
+		return
+	}
+
+	// Expand environment variables
+	bytes = []byte(os.ExpandEnv(string(bytes)))
+
+	return
 }

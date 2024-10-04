@@ -4,11 +4,13 @@ import (
 	"cloud.google.com/go/pubsub"
 	"context"
 	"fmt"
+	"github.com/inhies/go-bytesize"
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/constant/integer"
 	"github.com/rosaekapratama/go-starter/constant/location"
 	"github.com/rosaekapratama/go-starter/constant/str"
+	"github.com/rosaekapratama/go-starter/constant/sym"
 	myContext "github.com/rosaekapratama/go-starter/context"
 	myPubsub "github.com/rosaekapratama/go-starter/google/cloud/pubsub"
 	"github.com/rosaekapratama/go-starter/log"
@@ -20,7 +22,7 @@ import (
 	"time"
 )
 
-const spanPublish = "pubsub publish %s"
+const spanPublish = "common.google.cloud.pubsub.Publish %s"
 
 // NewPublisher create new pub
 func NewPublisher(client *pubsub.Client, topicId string, opts ...TopicOption) Publisher {
@@ -31,41 +33,41 @@ func NewPublisher(client *pubsub.Client, topicId string, opts ...TopicOption) Pu
 			opt.Apply(topic)
 		}
 	}
-	return &PublisherImpl{topic: topic, logging: cfg.Logging}
+	return &publisherImpl{topic: topic, logging: cfg.Logging}
 }
 
 // WithJsonEncoder set publisher encoder with JSON encoder
-func (p *PublisherImpl) WithJsonEncoder() Publisher {
+func (p *publisherImpl) WithJsonEncoder() Publisher {
 	p.encoder = &jsonEncoder{}
 	return p
 }
 
 // WithAvroEncoder set publisher encoder with AVRO encoder
-func (p *PublisherImpl) WithAvroEncoder(schemaName string) Publisher {
+func (p *publisherImpl) WithAvroEncoder(schemaName string) Publisher {
 	p.encoder = &avroEncoder{schemaName: schemaName}
 	return p
 }
 
 // WithProtobufEncoder set publisher encoder with protobuf encoder
-func (p *PublisherImpl) WithProtobufEncoder() Publisher {
+func (p *publisherImpl) WithProtobufEncoder() Publisher {
 	p.encoder = &protobufEncoder{}
 	return p
 }
 
 // WithStdoutLogging enable or disable outgoing message logging to stdout
-func (p *PublisherImpl) WithStdoutLogging(logging bool) Publisher {
+func (p *publisherImpl) WithStdoutLogging(logging bool) Publisher {
 	p.logging.Stdout = logging
 	return p
 }
 
 // WithDatabaseLogging enable or disable outgoing message logging to database
-func (p *PublisherImpl) WithDatabaseLogging(connectionId string) Publisher {
+func (p *publisherImpl) WithDatabaseLogging(connectionId string) Publisher {
 	p.logging.Database = connectionId
 	return p
 }
 
 // initMessage Init pubsub message
-func (p *PublisherImpl) initMessage(ctx context.Context, data interface{}, opts ...PublishOption) (*pubsub.Message, error) {
+func (p *publisherImpl) initMessage(ctx context.Context, data interface{}, opts ...PublishOption) (*pubsub.Message, error) {
 	message := &pubsub.Message{
 		Attributes: map[string]string{
 			myPubsub.TraceparentAttrKey:       myContext.TraceParentFromContext(ctx),
@@ -111,7 +113,7 @@ func (p *PublisherImpl) initMessage(ctx context.Context, data interface{}, opts 
 }
 
 // Publish publishing data to pubsub topic
-func (p *PublisherImpl) Publish(ctx context.Context, data interface{}, opts ...PublishOption) (serverId string, err error) {
+func (p *publisherImpl) Publish(ctx context.Context, data interface{}, opts ...PublishOption) (serverId string, err error) {
 	ctx, span := myOtel.Trace(ctx, fmt.Sprintf(spanPublish, p.topic.ID()))
 	defer span.End()
 
@@ -121,30 +123,42 @@ func (p *PublisherImpl) Publish(ctx context.Context, data interface{}, opts ...P
 		return str.Empty, err
 	}
 
-	pubsubFields := make(map[string]interface{})
-	pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubSub
-	pubsubFields[constant.IsSubscriberFieldKey] = false
-	pubsubFields[constant.TopicIdFieldKey] = p.topic.ID()
-	if len(message.Data) > integer.Zero && len(message.Data) <= (64*1000) {
-		pubsubFields[constant.MessageDataFieldKey] = string(message.Data)
-	}
-
 	result := p.topic.Publish(ctx, message)
 	// Block until the result is returned and
 	// a server-generated ID is returned for the published message.
 	serverId, err = result.Get(ctx)
-	if err != nil {
-		pubsubFields[constant.ErrorFieldKey] = err.Error()
-		log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Error()
-	} else if p.logging.Stdout {
-		pubsubFields[constant.MessageIdFieldKey] = serverId
-		log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
+
+	if p.logging.Stdout {
+		_payloadLogSizeLimit, err := bytesize.Parse(config.Instance.GetObject().Google.Cloud.Pubsub.Publisher.Logging.PayloadLogSizeLimit)
+		if err != nil {
+			log.Fatal(ctx, err, "Invalid value of GCP pubsub publisher payloadLogSizeLimit config")
+		}
+		payloadLogSizeLimit := int(_payloadLogSizeLimit)
+
+		pubsubFields := make(map[string]interface{})
+		pubsubFields[constant.LogTypeFieldLogKey] = constant.LogTypePubSub
+		pubsubFields[constant.IsSubscriberLogKey] = false
+		pubsubFields[constant.TopicIdLogKey] = p.topic.ID()
+		if len(message.Data) > payloadLogSizeLimit {
+			pubsubFields[constant.MessageDataLogKey] = string(message.Data[:payloadLogSizeLimit]) + sym.Ellipsis
+		} else if len(message.Data) > 0 {
+			pubsubFields[constant.MessageDataLogKey] = string(message.Data)
+		} else {
+			pubsubFields[constant.MessageDataLogKey] = str.Empty
+		}
+		if err != nil {
+			pubsubFields[constant.ErrorLogKey] = err.Error()
+			log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Error()
+		} else if p.logging.Stdout {
+			pubsubFields[constant.MessageIdLogKey] = serverId
+			log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
+		}
 	}
 
 	return
 }
 
-func (p *PublisherImpl) BatchPublish(ctx context.Context, batchData []interface{}, opts ...PublishOption) error {
+func (p *publisherImpl) BatchPublish(ctx context.Context, batchData []interface{}, opts ...PublishOption) error {
 	log.Tracef(ctx, "Batch publish data, topicId=%s, dataLen=%d", p.topic.ID(), len(batchData))
 	errs := cmap.New[bool]()
 	wg := &sync.WaitGroup{}

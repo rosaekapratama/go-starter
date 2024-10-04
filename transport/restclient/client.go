@@ -3,57 +3,76 @@ package restclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/go-resty/resty/v2"
+	"github.com/inhies/go-bytesize"
 	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/constant/headers"
 	"github.com/rosaekapratama/go-starter/constant/headers/contenttype"
-	"github.com/rosaekapratama/go-starter/constant/integer"
 	"github.com/rosaekapratama/go-starter/constant/str"
+	"github.com/rosaekapratama/go-starter/constant/sym"
 	"github.com/rosaekapratama/go-starter/log"
 	"github.com/rosaekapratama/go-starter/log/constant"
 	"github.com/rosaekapratama/go-starter/log/transport/repositories"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"net/http"
+	"reflect"
 	"time"
 )
 
 var (
-	_config       config.Config
-	Manager       IManager
-	LogRepository repositories.ITransportLogRepository
+	_config             config.Config
+	Manager             IManager
+	LogRepository       repositories.ITransportLogRepository
+	payloadLogSizeLimit int
 )
 
 func Init(ctx context.Context, config config.Config, restLogRepository repositories.ITransportLogRepository) {
 	_config = config
-	logStdout := _config.GetObject().Transport.Client.Rest.Logging.Stdout
-	logDB := _config.GetObject().Transport.Client.Rest.Logging.Database
-	client, err := newClient(ctx,
-		WithLogging(logStdout, logDB),
-		WithTimeout(time.Duration(_config.GetObject().Transport.Client.Rest.Timeout)*time.Second),
-		WithInsecureSkipVerify(_config.GetObject().Transport.Client.Rest.InsecureSkipVerify))
+	_logDB := _config.GetObject().Transport.Client.Rest.Logging.Database
+	_payloadLogSizeLimit, err := bytesize.Parse(_config.GetObject().Transport.Client.Rest.Logging.PayloadLogSizeLimit)
+	if err != nil {
+		log.Fatal(ctx, err, "Invalid value of REST client payloadLogSizeLimit config")
+	}
+	payloadLogSizeLimit = int(_payloadLogSizeLimit)
+
+	client, err := newClient(ctx)
 	if err != nil {
 		log.Fatal(ctx, err, "Failed to init default rest client")
 		return
 	}
-	Manager = &ManagerImpl{
+	Manager = &managerImpl{
 		defaultClient: client,
 	}
 
-	if logDB != str.Empty {
+	if _logDB != str.Empty {
 		LogRepository = restLogRepository
 	}
 }
 
-func (m *ManagerImpl) GetDefaultClient() *Client {
+func (m *managerImpl) GetDefaultClient() *Client {
 	return m.defaultClient
 }
 
 func newClient(ctx context.Context, opts ...ClientOption) (*Client, error) {
+	// List of common config
+	logStdout := _config.GetObject().Transport.Client.Rest.Logging.Stdout
+	logDB := _config.GetObject().Transport.Client.Rest.Logging.Database
+	timeout := time.Duration(_config.GetObject().Transport.Client.Rest.Timeout) * time.Second
+	insecureSkipVerify := _config.GetObject().Transport.Client.Rest.Insecure
+
 	client := &Client{
 		Resty:     resty.New().EnableTrace(),
 		transport: http.DefaultTransport.(*http.Transport),
 	}
+
+	// Apply common config
+	_ = WithInsecureSkipVerify(insecureSkipVerify).Apply(ctx, client)
+	_ = WithTimeout(timeout).Apply(ctx, client)
+	_ = WithLogging(logStdout, logDB).Apply(ctx, client)
+
+	// Apply user defined config
 	for _, opt := range opts {
 		err := opt.Apply(ctx, client)
 		if err != nil {
@@ -61,13 +80,15 @@ func newClient(ctx context.Context, opts ...ClientOption) (*Client, error) {
 			return nil, err
 		}
 	}
+
+	// Set pre and post of request process
 	client.Resty.SetTransport(otelhttp.NewTransport(client.transport))
-	if client.logging != nil && client.logging.Stdout {
+	if client.logging != nil && client.logging.stdout {
 		client.Resty.OnBeforeRequest(preStdoutLogging)
 		client.Resty.OnAfterResponse(postStdoutLogging)
 		client.Resty.OnError(errorStdoutLogging)
 	}
-	if client.logging != nil && client.logging.Database != str.Empty {
+	if client.logging != nil && client.logging.database != str.Empty {
 		client.Resty.OnBeforeRequest(preDatabaseLogging)
 		client.Resty.OnAfterResponse(postDatabaseLogging)
 		client.Resty.OnError(errorDatabaseLogging)
@@ -75,7 +96,7 @@ func newClient(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	return client, nil
 }
 
-func (m *ManagerImpl) NewClient(ctx context.Context, opts ...ClientOption) (*Client, error) {
+func (m *managerImpl) NewClient(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	return newClient(ctx, opts...)
 }
 
@@ -87,29 +108,49 @@ func (c *Client) NewRequest(ctx context.Context) *resty.Request {
 	return request
 }
 
+func marshalIfContentTypeIsApplicationJson(ctx context.Context, contentType string, body interface{}) (result []byte, ok bool) {
+	switch contentType {
+	case contenttype.ApplicationJson:
+		marshaledBody, err := json.Marshal(body)
+		if err != nil {
+			t := reflect.TypeOf(body)
+			log.Warnf(ctx, "unable to marshal body payload, struct=%s, error=%s", t.Name(), err.Error())
+			return
+		}
+		result = marshaledBody
+		ok = true
+	}
+	return
+}
+
 func preStdoutLogging(_ *resty.Client, r *resty.Request) error {
 	httpFields := make(map[string]interface{})
-	httpFields[constant.LogTypeFieldKey] = constant.LogTypeRest
-	httpFields[constant.UrlFieldKey] = r.URL
-	httpFields[constant.MethodFieldKey] = r.Method
-	httpFields[constant.IsServerFieldKey] = false
-	httpFields[constant.IsRequestFieldKey] = true
-	httpFields[constant.HeadersFieldKey] = r.Header
+	httpFields[constant.LogTypeFieldLogKey] = constant.LogTypeRest
+	httpFields[constant.UrlLogKey] = r.URL
+	httpFields[constant.MethodLogKey] = r.Method
+	httpFields[constant.IsServerLogKey] = false
+	httpFields[constant.IsRequestLogKey] = true
+	httpFields[constant.HeadersLogKey] = r.Header
 	if r.Body != nil {
 		var body string
-		contentType := r.Header.Get(headers.ContentType)
-		if contentType == contenttype.ApplicationJson {
-			bytes, err := json.Marshal(r.Body)
-			if err != nil {
-				log.Error(r.Context(), err, "Failed to marshal body payload for logging")
-				body = "Cannot parsed payload"
+		switch b := r.Body.(type) {
+		case string:
+			body = b
+		case []byte:
+			body = string(b)
+		default:
+			if result, ok := marshalIfContentTypeIsApplicationJson(r.Context(), r.Header.Get(headers.ContentType), b); ok {
+				body = string(result)
+			} else {
+				body = fmt.Sprintf("%v", body)
 			}
-			body = string(bytes)
-		} else {
-			body = fmt.Sprintf("%v", r.Body)
 		}
-		if len(body) > integer.Zero && len(body) <= (64*1000) {
-			httpFields[constant.BodyFieldKey] = body
+		if len(body) > payloadLogSizeLimit {
+			httpFields[constant.BodyLogKey] = body[:payloadLogSizeLimit] + sym.Ellipsis
+		} else if len(body) > 0 {
+			httpFields[constant.BodyLogKey] = body
+		} else {
+			httpFields[constant.BodyLogKey] = str.Empty
 		}
 	}
 	log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Info()
@@ -118,15 +159,19 @@ func preStdoutLogging(_ *resty.Client, r *resty.Request) error {
 
 func postStdoutLogging(_ *resty.Client, r *resty.Response) error {
 	httpFields := make(map[string]interface{})
-	httpFields[constant.LogTypeFieldKey] = constant.LogTypeRest
-	httpFields[constant.UrlFieldKey] = r.Request.URL
-	httpFields[constant.MethodFieldKey] = r.Request.Method
-	httpFields[constant.IsServerFieldKey] = false
-	httpFields[constant.IsRequestFieldKey] = false
-	httpFields[constant.StatusCodeFieldKey] = r.StatusCode()
-	httpFields[constant.HeadersFieldKey] = r.Header
-	if len(r.Body()) > integer.Zero && len(r.Body()) <= (64*1000) {
-		httpFields[constant.BodyFieldKey] = string(r.Body())
+	httpFields[constant.LogTypeFieldLogKey] = constant.LogTypeRest
+	httpFields[constant.UrlLogKey] = r.Request.URL
+	httpFields[constant.MethodLogKey] = r.Request.Method
+	httpFields[constant.IsServerLogKey] = false
+	httpFields[constant.IsRequestLogKey] = false
+	httpFields[constant.StatusCodeLogKey] = r.StatusCode()
+	httpFields[constant.HeadersLogKey] = r.Header
+	if len(r.Body()) > payloadLogSizeLimit {
+		httpFields[constant.BodyLogKey] = string(r.Body()[:payloadLogSizeLimit]) + sym.Ellipsis
+	} else if len(r.Body()) > 0 {
+		httpFields[constant.BodyLogKey] = string(r.Body())
+	} else {
+		httpFields[constant.BodyLogKey] = str.Empty
 	}
 	log.WithTraceFields(r.Request.Context()).WithFields(httpFields).GetLogrusLogger().Info()
 
@@ -134,17 +179,18 @@ func postStdoutLogging(_ *resty.Client, r *resty.Response) error {
 }
 
 func errorStdoutLogging(r *resty.Request, err error) {
-	if v, ok := err.(*resty.ResponseError); ok {
+	var v *resty.ResponseError
+	if errors.As(err, &v) {
 		// v.Response contains the last response from the server
 		// v.Err contains the original error
 
 		httpFields := make(map[string]interface{})
-		httpFields[constant.LogTypeFieldKey] = constant.LogTypeRest
-		httpFields[constant.UrlFieldKey] = r.URL
-		httpFields[constant.MethodFieldKey] = r.Method
-		httpFields[constant.IsServerFieldKey] = false
-		httpFields[constant.IsRequestFieldKey] = false
-		httpFields[constant.ErrorFieldKey] = v.Error()
+		httpFields[constant.LogTypeFieldLogKey] = constant.LogTypeRest
+		httpFields[constant.UrlLogKey] = r.URL
+		httpFields[constant.MethodLogKey] = r.Method
+		httpFields[constant.IsServerLogKey] = false
+		httpFields[constant.IsRequestLogKey] = false
+		httpFields[constant.ErrorLogKey] = v.Error()
 		log.WithTraceFields(r.Context()).WithFields(httpFields).GetLogrusLogger().Error()
 	}
 	// Log the error, increment a metric, etc...
@@ -161,12 +207,11 @@ func postDatabaseLogging(_ *resty.Client, r *resty.Response) error {
 }
 
 func errorDatabaseLogging(r *resty.Request, err error) {
-	if v, ok := err.(*resty.ResponseError); ok {
+	var v *resty.ResponseError
+	if errors.As(err, &v) {
 		// v.Response contains the last response from the server
 		// v.Err contains the original error
 
 		LogRepository.SaveRestError(r, v.Response, false, err)
-	} else {
-		LogRepository.SaveRestError(r, nil, false, err)
 	}
 }

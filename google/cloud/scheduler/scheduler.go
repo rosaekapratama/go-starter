@@ -12,7 +12,6 @@ import (
 	"google.golang.org/api/option"
 )
 
-const spanJobs = "gcp.scheduler.Jobs"
 const parent = "projects/%s/locations/%s"
 
 var (
@@ -26,7 +25,7 @@ func Init(ctx context.Context, credentials *google.Credentials) {
 		return
 	}
 
-	Service = &ServiceImpl{
+	Service = &serviceImpl{
 		projectId:        credentials.ProjectID,
 		schedulerService: schedulerService,
 	}
@@ -34,11 +33,11 @@ func Init(ctx context.Context, credentials *google.Credentials) {
 }
 
 // GetJobList will return job list in jakarta/asia-southeast2 location
-func (s *ServiceImpl) GetJobList(ctx context.Context) ([]*cloudscheduler.Job, error) {
+func (s *serviceImpl) GetJobList(ctx context.Context) ([]*cloudscheduler.Job, error) {
 	return s.GetJobListInLocation(ctx, location.Jakarta)
 }
 
-func (s *ServiceImpl) GetJobListInLocation(ctx context.Context, location string) ([]*cloudscheduler.Job, error) {
+func (s *serviceImpl) GetJobListInLocation(ctx context.Context, location string) ([]*cloudscheduler.Job, error) {
 	req := s.schedulerService.Projects.Locations.Jobs.List(fmt.Sprintf(parent, s.projectId, location))
 	jobs := make([]*cloudscheduler.Job, integer.Zero)
 	if err := req.Pages(ctx, func(page *cloudscheduler.ListJobsResponse) error {

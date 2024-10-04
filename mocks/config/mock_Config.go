@@ -167,6 +167,59 @@ func (_c *MockConfig_GetObject_Call) RunAndReturn(run func() *config.Object) *Mo
 	return _c
 }
 
+// GetRaw provides a mock function with given fields:
+func (_m *MockConfig) GetRaw() ([]byte, error) {
+	ret := _m.Called()
+
+	var r0 []byte
+	var r1 error
+	if rf, ok := ret.Get(0).(func() ([]byte, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() []byte); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]byte)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockConfig_GetRaw_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetRaw'
+type MockConfig_GetRaw_Call struct {
+	*mock.Call
+}
+
+// GetRaw is a helper method to define mock.On call
+func (_e *MockConfig_Expecter) GetRaw() *MockConfig_GetRaw_Call {
+	return &MockConfig_GetRaw_Call{Call: _e.mock.On("GetRaw")}
+}
+
+func (_c *MockConfig_GetRaw_Call) Run(run func()) *MockConfig_GetRaw_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockConfig_GetRaw_Call) Return(bytes []byte, err error) *MockConfig_GetRaw_Call {
+	_c.Call.Return(bytes, err)
+	return _c
+}
+
+func (_c *MockConfig_GetRaw_Call) RunAndReturn(run func() ([]byte, error)) *MockConfig_GetRaw_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetSlice provides a mock function with given fields: key
 func (_m *MockConfig) GetSlice(key string) ([]interface{}, error) {
 	ret := _m.Called(key)

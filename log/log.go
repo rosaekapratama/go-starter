@@ -2,6 +2,7 @@ package log
 
 import (
 	"context"
+	"errors"
 	"github.com/orandin/lumberjackrus"
 	"github.com/rosaekapratama/go-starter/constant/env"
 	"github.com/rosaekapratama/go-starter/constant/str"
@@ -9,6 +10,8 @@ import (
 	"github.com/rosaekapratama/go-starter/log/constant"
 	"github.com/rosaekapratama/go-starter/log/formatter/gcp"
 	"github.com/rosaekapratama/go-starter/loginit"
+	"github.com/rosaekapratama/go-starter/response"
+	"gorm.io/gorm"
 	"os"
 	"runtime"
 	"strconv"
@@ -31,7 +34,7 @@ var (
 func init() {
 	// loginit.Logger assignment need to be put in init(),
 	// so this logger can be mocked later in test unit
-	logger = &LoggerImpl{logger: loginit.Logger}
+	logger = &loggerImpl{logger: loginit.Logger}
 }
 
 // Init Set application log
@@ -97,7 +100,7 @@ func Init(ctx context.Context, config config.Config, projectId string) {
 	}
 
 	// Replace logger with configured logger
-	logger = &LoggerImpl{logger: standardLogger}
+	logger = &loggerImpl{logger: standardLogger}
 }
 
 func GetLogger() Logger {
@@ -111,18 +114,18 @@ func SetLogger(newLogger Logger) {
 func addTraceEntries(ctx context.Context, logger logrus.Ext1FieldLogger) logrus.Ext1FieldLogger {
 	sc := trace.SpanContextFromContext(ctx)
 	newLogger := logger.
-		WithField(constant.TraceIdKey, sc.TraceID().String()).
-		WithField(constant.SpanIdKey, sc.SpanID().String()).
-		WithField(constant.SpanParentIdKey, ctx.Value(constant.SpanParentIdKey))
+		WithField(constant.TraceIdLogKey, sc.TraceID().String()).
+		WithField(constant.SpanIdLogKey, sc.SpanID().String()).
+		WithField(constant.SpanParentIdLogKey, ctx.Value(constant.SpanParentIdLogKey))
 	return newLogger
 }
 
 func addCallerEntries(logger logrus.Ext1FieldLogger) logrus.Ext1FieldLogger {
 	if pc, file, line, ok := runtime.Caller(4); ok {
 		newLogger := logger.
-			WithField(constant.CallerFileKey, file).
-			WithField(constant.CallerFuncKey, runtime.FuncForPC(pc).Name()).
-			WithField(constant.CallerLineKey, line)
+			WithField(constant.CallerFileLogKey, file).
+			WithField(constant.CallerFuncLogKey, runtime.FuncForPC(pc).Name()).
+			WithField(constant.CallerLineLogKey, line)
 		return newLogger
 	}
 	return logger
@@ -137,91 +140,130 @@ func stdEntries(ctx context.Context, logger logrus.Ext1FieldLogger) logrus.Ext1F
 	return logger
 }
 
-func (logger *LoggerImpl) Trace(ctx context.Context, args ...interface{}) {
+func (logger *loggerImpl) Trace(ctx context.Context, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Trace(args...)
 }
 
-func (logger *LoggerImpl) Tracef(ctx context.Context, format string, args ...interface{}) {
+func (logger *loggerImpl) Tracef(ctx context.Context, format string, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Tracef(format, args...)
 }
 
-func (logger *LoggerImpl) Traceln(ctx context.Context, args ...interface{}) {
+func (logger *loggerImpl) Traceln(ctx context.Context, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Traceln(args...)
 }
 
-func (logger *LoggerImpl) Debug(ctx context.Context, args ...interface{}) {
+func (logger *loggerImpl) Debug(ctx context.Context, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Debug(args...)
 }
 
-func (logger *LoggerImpl) Debugf(ctx context.Context, format string, args ...interface{}) {
+func (logger *loggerImpl) Debugf(ctx context.Context, format string, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Debugf(format, args...)
 }
 
-func (logger *LoggerImpl) Debugln(ctx context.Context, args ...interface{}) {
+func (logger *loggerImpl) Debugln(ctx context.Context, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Debugln(args...)
 }
 
-func (logger *LoggerImpl) Print(ctx context.Context, args ...interface{}) {
+func (logger *loggerImpl) Print(ctx context.Context, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Print(args...)
 }
 
-func (logger *LoggerImpl) Printf(ctx context.Context, format string, args ...interface{}) {
+func (logger *loggerImpl) Printf(ctx context.Context, format string, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Printf(format, args...)
 }
 
-func (logger *LoggerImpl) Println(ctx context.Context, args ...interface{}) {
+func (logger *loggerImpl) Println(ctx context.Context, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Println(args...)
 }
 
-func (logger *LoggerImpl) Info(ctx context.Context, args ...interface{}) {
+func (logger *loggerImpl) Info(ctx context.Context, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Info(args...)
 }
 
-func (logger *LoggerImpl) Infof(ctx context.Context, format string, args ...interface{}) {
+func (logger *loggerImpl) Infof(ctx context.Context, format string, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Infof(format, args...)
 }
 
-func (logger *LoggerImpl) Infoln(ctx context.Context, args ...interface{}) {
+func (logger *loggerImpl) Infoln(ctx context.Context, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Infoln(args...)
 }
 
-func (logger *LoggerImpl) Warn(ctx context.Context, args ...interface{}) {
+func (logger *loggerImpl) Warn(ctx context.Context, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Warn(args...)
 }
 
-func (logger *LoggerImpl) Warnf(ctx context.Context, format string, args ...interface{}) {
+func (logger *loggerImpl) Warnf(ctx context.Context, format string, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Warnf(format, args...)
 }
 
-func (logger *LoggerImpl) Warnln(ctx context.Context, args ...interface{}) {
+func (logger *loggerImpl) Warnln(ctx context.Context, args ...interface{}) {
 	stdEntries(ctx, logger.logger).Warnln(args...)
 }
 
-func (logger *LoggerImpl) Error(ctx context.Context, err error, args ...interface{}) {
+func (logger *loggerImpl) Error(ctx context.Context, err error, args ...interface{}) {
 	span := trace.SpanFromContext(ctx)
 	if span != nil {
 		span.RecordError(err)
 	}
-	stdEntries(ctx, logger.logger).WithError(err).Error(args...)
+	switch v := err.(type) {
+	case response.IResponse:
+		if v.IsError() {
+			stdEntries(ctx, logger.logger).WithError(err).Error(args...)
+		} else {
+			stdEntries(ctx, logger.logger).WithError(err).Trace(args...)
+		}
+	default:
+		if errors.Is(gorm.ErrRecordNotFound, err) {
+			stdEntries(ctx, logger.logger).WithError(err).Trace(args...)
+		} else {
+			stdEntries(ctx, logger.logger).WithError(err).Error(args...)
+		}
+	}
 }
 
-func (logger *LoggerImpl) Errorf(ctx context.Context, err error, format string, args ...interface{}) {
+func (logger *loggerImpl) Errorf(ctx context.Context, err error, format string, args ...interface{}) {
 	span := trace.SpanFromContext(ctx)
 	if span != nil {
 		span.RecordError(err)
 	}
-	stdEntries(ctx, logger.logger).WithError(err).Errorf(format, args...)
+	switch v := err.(type) {
+	case response.IResponse:
+		if v.IsError() {
+			stdEntries(ctx, logger.logger).WithError(err).Errorf(format, args...)
+		} else {
+			stdEntries(ctx, logger.logger).WithError(err).Tracef(format, args...)
+		}
+	default:
+		if errors.Is(gorm.ErrRecordNotFound, err) {
+			stdEntries(ctx, logger.logger).WithError(err).Tracef(format, args...)
+		} else {
+			stdEntries(ctx, logger.logger).WithError(err).Errorf(format, args...)
+		}
+	}
 }
 
-func (logger *LoggerImpl) Errorln(ctx context.Context, err error, args ...interface{}) {
+func (logger *loggerImpl) Errorln(ctx context.Context, err error, args ...interface{}) {
 	span := trace.SpanFromContext(ctx)
 	if span != nil {
 		span.RecordError(err)
 	}
-	stdEntries(ctx, logger.logger).WithError(err).Errorln(args...)
+	switch v := err.(type) {
+	case response.IResponse:
+		if v.IsError() {
+			stdEntries(ctx, logger.logger).WithError(err).Errorln(args...)
+		} else {
+			stdEntries(ctx, logger.logger).WithError(err).Traceln(args...)
+		}
+	default:
+		if errors.Is(gorm.ErrRecordNotFound, err) {
+			stdEntries(ctx, logger.logger).WithError(err).Traceln(args...)
+		} else {
+			stdEntries(ctx, logger.logger).WithError(err).Errorln(args...)
+		}
+	}
 }
 
-func (logger *LoggerImpl) Fatal(ctx context.Context, err error, args ...interface{}) {
+func (logger *loggerImpl) Fatal(ctx context.Context, err error, args ...interface{}) {
 	span := trace.SpanFromContext(ctx)
 	if span != nil {
 		span.RecordError(err)
@@ -229,7 +271,7 @@ func (logger *LoggerImpl) Fatal(ctx context.Context, err error, args ...interfac
 	stdEntries(ctx, logger.logger).WithError(err).Fatal(args...)
 }
 
-func (logger *LoggerImpl) Fatalf(ctx context.Context, err error, format string, args ...interface{}) {
+func (logger *loggerImpl) Fatalf(ctx context.Context, err error, format string, args ...interface{}) {
 	span := trace.SpanFromContext(ctx)
 	if span != nil {
 		span.RecordError(err)
@@ -237,7 +279,7 @@ func (logger *LoggerImpl) Fatalf(ctx context.Context, err error, format string, 
 	stdEntries(ctx, logger.logger).WithError(err).Fatalf(format, args...)
 }
 
-func (logger *LoggerImpl) Fatalln(ctx context.Context, err error, args ...interface{}) {
+func (logger *loggerImpl) Fatalln(ctx context.Context, err error, args ...interface{}) {
 	span := trace.SpanFromContext(ctx)
 	if span != nil {
 		span.RecordError(err)
@@ -245,7 +287,7 @@ func (logger *LoggerImpl) Fatalln(ctx context.Context, err error, args ...interf
 	stdEntries(ctx, logger.logger).WithError(err).Fatalln(args...)
 }
 
-func (logger *LoggerImpl) Panic(ctx context.Context, err error, args ...interface{}) {
+func (logger *loggerImpl) Panic(ctx context.Context, err error, args ...interface{}) {
 	span := trace.SpanFromContext(ctx)
 	if span != nil {
 		span.RecordError(err)
@@ -253,7 +295,7 @@ func (logger *LoggerImpl) Panic(ctx context.Context, err error, args ...interfac
 	stdEntries(ctx, logger.logger).WithError(err).Panic(args...)
 }
 
-func (logger *LoggerImpl) Panicf(ctx context.Context, err error, format string, args ...interface{}) {
+func (logger *loggerImpl) Panicf(ctx context.Context, err error, format string, args ...interface{}) {
 	span := trace.SpanFromContext(ctx)
 	if span != nil {
 		span.RecordError(err)
@@ -261,7 +303,7 @@ func (logger *LoggerImpl) Panicf(ctx context.Context, err error, format string, 
 	stdEntries(ctx, logger.logger).WithError(err).Panicf(format, args...)
 }
 
-func (logger *LoggerImpl) Panicln(ctx context.Context, err error, args ...interface{}) {
+func (logger *loggerImpl) Panicln(ctx context.Context, err error, args ...interface{}) {
 	span := trace.SpanFromContext(ctx)
 	if span != nil {
 		span.RecordError(err)
@@ -269,24 +311,24 @@ func (logger *LoggerImpl) Panicln(ctx context.Context, err error, args ...interf
 	stdEntries(ctx, logger.logger).WithError(err).Panicln(args...)
 }
 
-func (logger *LoggerImpl) GetLevel() logrus.Level {
+func (logger *loggerImpl) GetLevel() logrus.Level {
 	return level
 }
 
-func (logger *LoggerImpl) GetLogrusLogger() logrus.Ext1FieldLogger {
+func (logger *loggerImpl) GetLogrusLogger() logrus.Ext1FieldLogger {
 	return logger.logger
 }
 
-func (logger *LoggerImpl) WithField(key string, value interface{}) Logger {
-	return &LoggerImpl{logger: logger.logger.WithField(key, value)}
+func (logger *loggerImpl) WithField(key string, value interface{}) Logger {
+	return &loggerImpl{logger: logger.logger.WithField(key, value)}
 }
 
-func (logger *LoggerImpl) WithFields(fields map[string]interface{}) Logger {
-	return &LoggerImpl{logger: logger.logger.WithFields(fields)}
+func (logger *loggerImpl) WithFields(fields map[string]interface{}) Logger {
+	return &loggerImpl{logger: logger.logger.WithFields(fields)}
 }
 
-func (logger *LoggerImpl) WithTraceFields(ctx context.Context) Logger {
-	return &LoggerImpl{logger: addTraceEntries(ctx, logger.logger)}
+func (logger *loggerImpl) WithTraceFields(ctx context.Context) Logger {
+	return &loggerImpl{logger: addTraceEntries(ctx, logger.logger)}
 }
 
 func Trace(ctx context.Context, args ...interface{}) {

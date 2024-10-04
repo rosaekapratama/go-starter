@@ -10,7 +10,7 @@ type App interface {
 	GetMessagingClient() MessagingClient
 }
 
-type AppImpl struct {
+type appImpl struct {
 	app             *firebase.App
 	messagingClient *messaging.Client
 }

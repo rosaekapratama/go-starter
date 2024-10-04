@@ -4,8 +4,11 @@ import (
 	"cloud.google.com/go/pubsub"
 	"context"
 	"fmt"
+	"github.com/inhies/go-bytesize"
 	"github.com/rosaekapratama/go-starter/config"
 	"github.com/rosaekapratama/go-starter/constant/integer"
+	"github.com/rosaekapratama/go-starter/constant/str"
+	"github.com/rosaekapratama/go-starter/constant/sym"
 	myContext "github.com/rosaekapratama/go-starter/context"
 	myPubsub "github.com/rosaekapratama/go-starter/google/cloud/pubsub"
 	"github.com/rosaekapratama/go-starter/log"
@@ -17,7 +20,7 @@ import (
 	"time"
 )
 
-const spanSubscriber = "pubsub receive %s"
+const spanReceive = "common.google.cloud.pubsub.Receive %s"
 
 var (
 	client *pubsub.Client
@@ -84,7 +87,7 @@ func receive(subId string, state myPubsub.State, f func(ctx context.Context, pla
 	err = sub.Receive(ctx, func(ctx context.Context, plainMessage *pubsub.Message) {
 		// Add traceparent to pubsub message attributes
 		ctx = myContext.ContextWithTraceParent(ctx, plainMessage.Attributes[myPubsub.TraceparentAttrKey])
-		ctx, span := otel.Trace(ctx, fmt.Sprintf(spanSubscriber, subId))
+		ctx, span := otel.Trace(ctx, fmt.Sprintf(spanReceive, subId))
 		defer span.End()
 
 		// If state matches, then continue, or break if not matches
@@ -94,15 +97,25 @@ func receive(subId string, state myPubsub.State, f func(ctx context.Context, pla
 		}
 
 		if cfg.Logging.Stdout {
+			_payloadLogSizeLimit, err := bytesize.Parse(config.Instance.GetObject().Google.Cloud.Pubsub.Subscriber.Logging.PayloadLogSizeLimit)
+			if err != nil {
+				log.Fatal(ctx, err, "Invalid value of GCP pubsub subscriber payloadLogSizeLimit config")
+			}
+			payloadLogSizeLimit := int(_payloadLogSizeLimit)
+
 			// Logging incoming message
 			pubsubFields := make(map[string]interface{})
-			pubsubFields[constant.LogTypeFieldKey] = constant.LogTypePubSub
-			pubsubFields[constant.IsSubscriberFieldKey] = true
-			pubsubFields[constant.SubscriberIdFieldKey] = subId
-			pubsubFields[constant.MessageIdFieldKey] = plainMessage.ID
-			pubsubFields[constant.MessageStateFieldKey] = messageState
-			if len(plainMessage.Data) > integer.Zero && len(plainMessage.Data) <= (64*1000) {
-				pubsubFields[constant.MessageDataFieldKey] = string(plainMessage.Data)
+			pubsubFields[constant.LogTypeFieldLogKey] = constant.LogTypePubSub
+			pubsubFields[constant.IsSubscriberLogKey] = true
+			pubsubFields[constant.SubscriberIdLogKey] = subId
+			pubsubFields[constant.MessageIdLogKey] = plainMessage.ID
+			pubsubFields[constant.MessageStateLogKey] = messageState
+			if len(plainMessage.Data) > payloadLogSizeLimit {
+				pubsubFields[constant.MessageDataLogKey] = string(plainMessage.Data[:payloadLogSizeLimit]) + sym.Ellipsis
+			} else if len(plainMessage.Data) > 0 {
+				pubsubFields[constant.MessageDataLogKey] = string(plainMessage.Data)
+			} else {
+				pubsubFields[constant.MessageDataLogKey] = str.Empty
 			}
 			log.WithTraceFields(ctx).WithFields(pubsubFields).GetLogrusLogger().Info()
 		}

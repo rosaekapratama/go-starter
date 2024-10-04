@@ -11,7 +11,7 @@ type IManager interface {
 	DB(ctx context.Context, connectionID string) (*gorm.DB, *sql.DB, error)
 }
 
-type ManagerImpl struct {
+type managerImpl struct {
 	gormDBMap map[string]*gorm.DB
 	sqlDBMap  map[string]*sql.DB
 }

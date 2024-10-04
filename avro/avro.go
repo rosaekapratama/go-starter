@@ -48,7 +48,7 @@ func Init(ctx context.Context, _ config.Config) {
 		return
 	}
 
-	// Load all avsc file under default dir
+	// Load all avsc files under default dir
 	for _, entry := range dir {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), avscExt) {
 			path := filepath.Join(abs, entry.Name())

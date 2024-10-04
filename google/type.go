@@ -6,6 +6,7 @@ import (
 	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/publisher"
 	"github.com/rosaekapratama/go-starter/google/cloud/scheduler"
 	"github.com/rosaekapratama/go-starter/google/cloud/storage"
+	"github.com/rosaekapratama/go-starter/google/drive"
 	"github.com/rosaekapratama/go-starter/google/firebase"
 	"golang.org/x/oauth2/google"
 )
@@ -19,9 +20,10 @@ type IManager interface {
 	NewPubSubPublisher(topicId string, opts ...publisher.TopicOption) publisher.Publisher
 	GetSchedulerService() scheduler.IService
 	GetStorageClient() storage.IClient
+	GetDriveService() drive.IService
 }
 
-type ManagerImpl struct {
+type managerImpl struct {
 	credentials *google.Credentials
 	jsonKey     *JsonKey
 
@@ -30,6 +32,7 @@ type ManagerImpl struct {
 	pubsubClient     *pubsub.Client
 	schedulerService scheduler.IService
 	storageClient    storage.IClient
+	driveService     drive.IService
 }
 
 type JsonKey struct {

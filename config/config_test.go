@@ -145,10 +145,9 @@ google:
         - aud: audience2
           email: email2@example.com
           sub: subject2
-
-firebase:
-  messaging:
-    disabled: false
+  firebase:
+    messaging:
+      disabled: false
 
 zeebe:
   address: localhost:26500
@@ -157,10 +156,11 @@ zeebe:
   authorizationServerURL: https://your-auth-server.com
 
 elasticSearch:
-  addresses:
-    - http://localhost:9200
-  username: esuser
-  password: espassword
+  test:
+    addresses:
+      - http://localhost:9200
+    username: esuser
+    password: espassword
 `
 )
 

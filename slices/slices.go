@@ -1,6 +1,7 @@
 package slices
 
 import (
+	"github.com/google/uuid"
 	"github.com/rosaekapratama/go-starter/constant/integer"
 	"strings"
 )
@@ -93,6 +94,23 @@ func ContainUint64(slice []uint64, elem uint64) bool {
 }
 
 func ContainUint64s(slice []uint64, elems ...uint64) bool {
+	for _, e := range elems {
+		var result bool
+		for _, v := range slice {
+			if e == v {
+				result = true
+				break
+			}
+		}
+
+		if !result {
+			return false
+		}
+	}
+	return true
+}
+
+func ContainUUIDs(slice []uuid.UUID, elems ...uuid.UUID) bool {
 	for _, e := range elems {
 		var result bool
 		for _, v := range slice {

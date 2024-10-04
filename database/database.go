@@ -204,13 +204,13 @@ func Init(ctx context.Context, config config.Config) {
 		sqlDBMap[id] = sqlDB
 	}
 
-	Manager = &ManagerImpl{
+	Manager = &managerImpl{
 		gormDBMap: gormDBMap,
 		sqlDBMap:  sqlDBMap,
 	}
 }
 
-func (manager *ManagerImpl) GetConnectionIds() []string {
+func (manager *managerImpl) GetConnectionIds() []string {
 	var keys []string
 	for k := range manager.gormDBMap {
 		keys = append(keys, k)
@@ -219,7 +219,7 @@ func (manager *ManagerImpl) GetConnectionIds() []string {
 	return keys
 }
 
-func (manager *ManagerImpl) DB(ctx context.Context, connectionID string) (*gorm.DB, *sql.DB, error) {
+func (manager *managerImpl) DB(ctx context.Context, connectionID string) (*gorm.DB, *sql.DB, error) {
 
 	if gormDB, ok := manager.gormDBMap[connectionID]; ok {
 		if sqlDB, ok := manager.sqlDBMap[connectionID]; ok {

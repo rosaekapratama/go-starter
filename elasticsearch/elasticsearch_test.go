@@ -49,7 +49,7 @@ func TestElasticSearchTestSuite(t *testing.T) {
 }
 
 func (s *ElasticSearchTestSuite) TestInitCfgAddressEmptyError() {
-	mockConfig.On("GetObject").Return(&config.Object{ElasticSearch: &config.ElasticSearchConfig{Disabled: false}})
+	mockConfig.On("GetObject").Return(&config.Object{ElasticSearch: map[string]*config.ElasticSearchConfig{"test": {Disabled: false}}})
 	mockLog.EXPECT().Fatal(mock.Anything, response.ConfigNotFound, errMissingElasticSearchAddressConfig)
 	Init(ctx, mockConfig)
 }

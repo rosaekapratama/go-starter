@@ -46,13 +46,14 @@ type WriterInterceptor struct {
 	size   int
 	status int
 
-	ctx       context.Context
-	response  response.IResponse
-	page      *page.PageResponse
-	body      []byte
-	IsWritten bool
-	IsRaw     bool
-	a         []any
+	ctx                 context.Context
+	response            response.IResponse
+	page                *page.PageResponse
+	body                []byte
+	IsWritten           bool
+	IsRaw               bool
+	a                   []any
+	payloadLogSizeLimit int
 }
 
 func (w *WriterInterceptor) Unwrap() http.ResponseWriter {
@@ -88,6 +89,16 @@ func (w *WriterInterceptor) Write(b []byte) (int, error) {
 	contentType := strings.ToLower(strings.Split(w.ResponseWriter.Header().Get(headers.ContentType), sym.SemiColon)[0])
 	if contentType != contentTypeApplicationJson || w.IsRaw {
 		w.IsWritten = true
+		if len(b) > w.payloadLogSizeLimit {
+			w.body = make([]byte, w.payloadLogSizeLimit)
+			copy(w.body, b[:w.payloadLogSizeLimit])
+			w.body = append(w.body, sym.Ellipsis...)
+		} else if len(b) > 0 {
+			w.body = make([]byte, len(b))
+			copy(w.body, b)
+		} else {
+			w.body = make([]byte, 0)
+		}
 		return w.ResponseWriter.Write(b)
 	}
 
@@ -146,7 +157,16 @@ func (w *WriterInterceptor) Write(b []byte) (int, error) {
 	w.IsWritten = true
 	w.size = realLen
 	w.status = w.response.HttpStatusCode()
-	w.body = rb
+	if len(rb) > w.payloadLogSizeLimit {
+		w.body = make([]byte, w.payloadLogSizeLimit)
+		copy(w.body, rb[:w.payloadLogSizeLimit])
+		w.body = append(w.body, sym.Ellipsis...)
+	} else if len(rb) > 0 {
+		w.body = make([]byte, len(rb))
+		copy(w.body, rb)
+	} else {
+		w.body = make([]byte, 0)
+	}
 	w.ResponseWriter.WriteHeader(w.response.HttpStatusCode())
 	_, err = w.ResponseWriter.Write(rb)
 	w.Header().Set(headers.ContentLength, strconv.Itoa(realLen))
@@ -199,8 +219,20 @@ func (w *WriterInterceptor) Pusher() (pusher http.Pusher) {
 	return nil
 }
 
-func NewWriterInterceptor(ctx context.Context, w http.ResponseWriter) *WriterInterceptor {
-	return &WriterInterceptor{w, integer.NOne, integer.Zero, ctx, nil, nil, nil, false, false, nil}
+func NewWriterInterceptor(ctx context.Context, w http.ResponseWriter, payloadLogSizeLimit int) *WriterInterceptor {
+	return &WriterInterceptor{
+		w,
+		integer.NOne,
+		integer.Zero,
+		ctx,
+		nil,
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		payloadLogSizeLimit,
+	}
 }
 
 func (r *BaseResponse) setResponse(i *WriterInterceptor) error {

@@ -16,7 +16,7 @@ type Publisher interface {
 	WithDatabaseLogging(connectionId string) Publisher
 }
 
-type PublisherImpl struct {
+type publisherImpl struct {
 	topic   *pubsub.Topic
 	encoder Encoder
 	logging *config.GoogleCloudPubsubPublisherLoggingConfig

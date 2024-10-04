@@ -14,6 +14,7 @@ import (
 	"github.com/rosaekapratama/go-starter/google/cloud/pubsub/publisher"
 	"github.com/rosaekapratama/go-starter/google/cloud/scheduler"
 	"github.com/rosaekapratama/go-starter/google/cloud/storage"
+	"github.com/rosaekapratama/go-starter/google/drive"
 	"github.com/rosaekapratama/go-starter/google/firebase"
 	"github.com/rosaekapratama/go-starter/log"
 	"github.com/rosaekapratama/go-starter/response"
@@ -101,8 +102,10 @@ func Init(
 	oauthClient oauth.Client,
 	pubsubClient *pubsub.Client,
 	schedulerService scheduler.IService,
-	storageClient storage.IClient) {
-	Manager = &ManagerImpl{
+	storageClient storage.IClient,
+	driveService drive.IService,
+) {
+	Manager = &managerImpl{
 		credentials:      credentials,
 		jsonKey:          jsonKey,
 		firebaseApp:      firebaseApp,
@@ -110,38 +113,43 @@ func Init(
 		pubsubClient:     pubsubClient,
 		schedulerService: schedulerService,
 		storageClient:    storageClient,
+		driveService:     driveService,
 	}
 	log.Info(ctx, "Google manager is initiated")
 }
 
-func (m *ManagerImpl) GetJsonKey() *JsonKey {
+func (m *managerImpl) GetJsonKey() *JsonKey {
 	return m.jsonKey
 }
 
-func (m *ManagerImpl) GetCredentials() *google.Credentials {
+func (m *managerImpl) GetCredentials() *google.Credentials {
 	return m.credentials
 }
 
-func (m *ManagerImpl) GetFirebaseApp() firebase.App {
+func (m *managerImpl) GetFirebaseApp() firebase.App {
 	return m.firebaseApp
 }
 
-func (m *ManagerImpl) GetOAuthClient() oauth.Client {
+func (m *managerImpl) GetOAuthClient() oauth.Client {
 	return m.oauthClient
 }
 
-func (m *ManagerImpl) GetPubSubClient() *pubsub.Client {
+func (m *managerImpl) GetPubSubClient() *pubsub.Client {
 	return m.pubsubClient
 }
 
-func (m *ManagerImpl) NewPubSubPublisher(topicId string, opts ...publisher.TopicOption) publisher.Publisher {
+func (m *managerImpl) NewPubSubPublisher(topicId string, opts ...publisher.TopicOption) publisher.Publisher {
 	return publisher.NewPublisher(m.pubsubClient, topicId, opts...)
 }
 
-func (m *ManagerImpl) GetSchedulerService() scheduler.IService {
+func (m *managerImpl) GetSchedulerService() scheduler.IService {
 	return m.schedulerService
 }
 
-func (m *ManagerImpl) GetStorageClient() storage.IClient {
+func (m *managerImpl) GetStorageClient() storage.IClient {
 	return m.storageClient
+}
+
+func (m *managerImpl) GetDriveService() drive.IService {
+	return m.driveService
 }

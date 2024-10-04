@@ -54,7 +54,7 @@ func Init(ctx context.Context, config config.Config) {
 			log.Fatal(ctx, err, "Redis single mode init failed")
 			return
 		}
-		log.Info(ctx, "Redis client is initiated in single mode")
+		log.Infof(ctx, "Redis client is initiated in single mode, address=%s, db=%d", cfg.Addr, *cfg.DB)
 	} else if mode == modeSentinel {
 		if len(cfg.SentinelAddrs) == integer.Zero {
 			log.Fatal(ctx, response.ConfigNotFound, "Missing redis sentinel addresses")
@@ -65,7 +65,7 @@ func Init(ctx context.Context, config config.Config) {
 			log.Fatal(ctx, err, "Redis sentinel mode init failed")
 			return
 		}
-		log.Info(ctx, "Redis client is initiated in sentinel mode")
+		log.Infof(ctx, "Redis client is initiated in sentinel mode, address=%s, db=%d", cfg.SentinelAddrs, *cfg.DB)
 	} else {
 		log.Fatalf(ctx, response.InvalidConfig, "Unsupported mode '%s', valid mode are single or sentinel", mode)
 		return
@@ -96,6 +96,9 @@ func initSingleMode(ctx context.Context, cfg *config.RedisConfig) error {
 	singleConfig := cfg
 	option := &redis.Options{
 		Addr: singleConfig.Addr,
+	}
+	if singleConfig.DB == nil {
+		return response.InvalidConfig
 	}
 	if !utils.IsZeroValue(singleConfig.DB) {
 		option.DB = *singleConfig.DB
@@ -165,6 +168,9 @@ func initSentinelMode(ctx context.Context, cfg *config.RedisConfig) error {
 		MasterName:    sentinelConfig.MasterName,
 		SentinelAddrs: sentinelConfig.SentinelAddrs,
 	}
+	if sentinelConfig.DB == nil {
+		return response.InvalidConfig
+	}
 	if !utils.IsZeroValue(sentinelConfig.DB) {
 		option.DB = *sentinelConfig.DB
 	}
@@ -232,7 +238,7 @@ func initSentinelMode(ctx context.Context, cfg *config.RedisConfig) error {
 		option.UseDisconnectedReplicas = *sentinelConfig.UseDisconnectedReplicas
 	}
 
-	Client = redis.NewFailoverClusterClient(option)
+	Client = redis.NewFailoverClient(option)
 	ping, err := Client.Ping(ctx).Result()
 	if err != nil {
 		log.Error(ctx, err, "Ping failed")

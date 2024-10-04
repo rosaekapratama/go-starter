@@ -78,32 +78,32 @@ func (_c *MockIManager_GetConn_Call) RunAndReturn(run func(context.Context, stri
 	return _c
 }
 
-// InitConn provides a mock function with given fields: ctx, connId, address, opts
-func (_m *MockIManager) InitConn(ctx context.Context, connId string, address string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+// initConn provides a mock function with given fields: ctx, connId, address, stdoutLogging, databaseLogging, payloadLogSizeLimit, opts
+func (_m *MockIManager) initConn(ctx context.Context, connId string, address string, stdoutLogging bool, databaseLogging string, payloadLogSizeLimit uint64, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	_va := make([]interface{}, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
 	var _ca []interface{}
-	_ca = append(_ca, ctx, connId, address)
+	_ca = append(_ca, ctx, connId, address, stdoutLogging, databaseLogging, payloadLogSizeLimit)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
 	var r0 *grpc.ClientConn
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...grpc.DialOption) (*grpc.ClientConn, error)); ok {
-		return rf(ctx, connId, address, opts...)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, bool, string, uint64, ...grpc.DialOption) (*grpc.ClientConn, error)); ok {
+		return rf(ctx, connId, address, stdoutLogging, databaseLogging, payloadLogSizeLimit, opts...)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...grpc.DialOption) *grpc.ClientConn); ok {
-		r0 = rf(ctx, connId, address, opts...)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, bool, string, uint64, ...grpc.DialOption) *grpc.ClientConn); ok {
+		r0 = rf(ctx, connId, address, stdoutLogging, databaseLogging, payloadLogSizeLimit, opts...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*grpc.ClientConn)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, ...grpc.DialOption) error); ok {
-		r1 = rf(ctx, connId, address, opts...)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, bool, string, uint64, ...grpc.DialOption) error); ok {
+		r1 = rf(ctx, connId, address, stdoutLogging, databaseLogging, payloadLogSizeLimit, opts...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -111,40 +111,43 @@ func (_m *MockIManager) InitConn(ctx context.Context, connId string, address str
 	return r0, r1
 }
 
-// MockIManager_InitConn_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InitConn'
-type MockIManager_InitConn_Call struct {
+// MockIManager_initConn_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'initConn'
+type MockIManager_initConn_Call struct {
 	*mock.Call
 }
 
-// InitConn is a helper method to define mock.On call
+// initConn is a helper method to define mock.On call
 //   - ctx context.Context
 //   - connId string
 //   - address string
+//   - stdoutLogging bool
+//   - databaseLogging string
+//   - payloadLogSizeLimit uint64
 //   - opts ...grpc.DialOption
-func (_e *MockIManager_Expecter) InitConn(ctx interface{}, connId interface{}, address interface{}, opts ...interface{}) *MockIManager_InitConn_Call {
-	return &MockIManager_InitConn_Call{Call: _e.mock.On("InitConn",
-		append([]interface{}{ctx, connId, address}, opts...)...)}
+func (_e *MockIManager_Expecter) initConn(ctx interface{}, connId interface{}, address interface{}, stdoutLogging interface{}, databaseLogging interface{}, payloadLogSizeLimit interface{}, opts ...interface{}) *MockIManager_initConn_Call {
+	return &MockIManager_initConn_Call{Call: _e.mock.On("initConn",
+		append([]interface{}{ctx, connId, address, stdoutLogging, databaseLogging, payloadLogSizeLimit}, opts...)...)}
 }
 
-func (_c *MockIManager_InitConn_Call) Run(run func(ctx context.Context, connId string, address string, opts ...grpc.DialOption)) *MockIManager_InitConn_Call {
+func (_c *MockIManager_initConn_Call) Run(run func(ctx context.Context, connId string, address string, stdoutLogging bool, databaseLogging string, payloadLogSizeLimit uint64, opts ...grpc.DialOption)) *MockIManager_initConn_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		variadicArgs := make([]grpc.DialOption, len(args)-3)
-		for i, a := range args[3:] {
+		variadicArgs := make([]grpc.DialOption, len(args)-6)
+		for i, a := range args[6:] {
 			if a != nil {
 				variadicArgs[i] = a.(grpc.DialOption)
 			}
 		}
-		run(args[0].(context.Context), args[1].(string), args[2].(string), variadicArgs...)
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(bool), args[4].(string), args[5].(uint64), variadicArgs...)
 	})
 	return _c
 }
 
-func (_c *MockIManager_InitConn_Call) Return(conn *grpc.ClientConn, err error) *MockIManager_InitConn_Call {
+func (_c *MockIManager_initConn_Call) Return(conn *grpc.ClientConn, err error) *MockIManager_initConn_Call {
 	_c.Call.Return(conn, err)
 	return _c
 }
 
-func (_c *MockIManager_InitConn_Call) RunAndReturn(run func(context.Context, string, string, ...grpc.DialOption) (*grpc.ClientConn, error)) *MockIManager_InitConn_Call {
+func (_c *MockIManager_initConn_Call) RunAndReturn(run func(context.Context, string, string, bool, string, uint64, ...grpc.DialOption) (*grpc.ClientConn, error)) *MockIManager_initConn_Call {
 	_c.Call.Return(run)
 	return _c
 }

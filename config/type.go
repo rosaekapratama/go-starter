@@ -12,9 +12,12 @@ type Config interface {
 	GetBool(key string) (bool, error)
 	GetSlice(key string) ([]interface{}, error)
 	GetStringAndThrowFatalIfEmpty(key string) string
+	GetRaw() (bytes []byte, err error)
 }
 
-type ConfigImpl struct {
+type configImpl struct {
+	configFilePath string
+
 	// All config key and value will be unmarshal here
 	o *Object
 
@@ -23,21 +26,23 @@ type ConfigImpl struct {
 }
 
 type Object struct {
-	App           *AppConfig                 `yaml:"app"`
-	Transport     *TransportConfig           `yaml:"transport"`
-	Cors          *CorsConfig                `yaml:"cors"`
-	Database      map[string]*DatabaseConfig `yaml:"database"`
-	Redis         *RedisConfig               `yaml:"redis"`
-	Log           *LogConfig                 `yaml:"log"`
-	Otel          *OtelConfig                `yaml:"otel"`
-	Google        *GoogleConfig              `yaml:"google"`
-	Zeebe         *ZeebeConfig               `yaml:"zeebe"`
-	ElasticSearch *ElasticSearchConfig       `yaml:"elasticSearch"`
+	App           *AppConfig                      `yaml:"app"`
+	Transport     *TransportConfig                `yaml:"transport"`
+	Cors          *CorsConfig                     `yaml:"cors"`
+	Database      map[string]*DatabaseConfig      `yaml:"database"`
+	Redis         *RedisConfig                    `yaml:"redis"`
+	Log           *LogConfig                      `yaml:"log"`
+	Otel          *OtelConfig                     `yaml:"otel"`
+	Google        *GoogleConfig                   `yaml:"google"`
+	Zeebe         *ZeebeConfig                    `yaml:"zeebe"`
+	ElasticSearch map[string]*ElasticSearchConfig `yaml:"elasticSearch"`
+	Sftp          *SftpConfig                     `yaml:"sftp"`
 }
 
 type AppConfig struct {
 	Name string `yaml:"name"`
 	Mode string `yaml:"mode"`
+	Host string `yaml:"host"`
 }
 
 type TransportConfig struct {
@@ -46,30 +51,60 @@ type TransportConfig struct {
 }
 
 type ClientConfig struct {
-	Rest *RestClientConfig `yaml:"rest"`
-	Soap *SoapClientConfig `yaml:"soap"`
+	Rest *RestClientConfig            `yaml:"rest"`
+	Soap *SoapClientConfig            `yaml:"soap"`
+	Grpc map[string]*GrpcClientConfig `yaml:"grpc"`
+	Ssh  map[string]*SshClientConfig  `yaml:"ssh"`
 }
 
 type RestClientConfig struct {
-	Logging            *RestClientLoggingConfig `yaml:"logging"`
-	Timeout            int                      `yaml:"timeout"`
-	InsecureSkipVerify bool                     `yaml:"insecureSkipVerify"`
+	Logging  *RestClientLoggingConfig `yaml:"logging"`
+	Timeout  int                      `yaml:"timeout"`
+	Insecure bool                     `yaml:"insecure"`
 }
 
 type RestClientLoggingConfig struct {
-	Stdout   bool   `yaml:"stdout"`
-	Database string `yaml:"database"`
+	PayloadLogSizeLimit string `yaml:"payloadLogSizeLimit"`
+	Stdout              bool   `yaml:"stdout"`
+	Database            string `yaml:"database"`
 }
 
 type SoapClientConfig struct {
-	Logging            *SoapClientLoggingConfig `yaml:"logging"`
-	Timeout            int                      `yaml:"timeout"`
-	InsecureSkipVerify bool                     `yaml:"insecureSkipVerify"`
+	Logging  *SoapClientLoggingConfig `yaml:"logging"`
+	Timeout  int                      `yaml:"timeout"`
+	Insecure bool                     `yaml:"insecure"`
 }
 
 type SoapClientLoggingConfig struct {
-	Stdout   bool   `yaml:"stdout"`
-	Database string `yaml:"database"`
+	PayloadLogSizeLimit string `yaml:"payloadLogSizeLimit"`
+	Stdout              bool   `yaml:"stdout"`
+	Database            string `yaml:"database"`
+}
+
+type GrpcClientConfig struct {
+	Address  string                       `yaml:"address"`
+	Timeout  int                          `yaml:"timeout"`
+	Insecure bool                         `yaml:"insecure"`
+	Logging  *GrpcClientConnLoggingConfig `yaml:"logging"`
+}
+
+type GrpcClientConnLoggingConfig struct {
+	PayloadLogSizeLimit string `yaml:"payloadLogSizeLimit"`
+	Stdout              bool   `yaml:"stdout"`
+	Database            string `yaml:"database"`
+}
+
+type SshClientConfig struct {
+	Address     string               `yaml:"address"`
+	Username    string               `yaml:"username"`
+	Auth        *SshClientAuthConfig `yaml:"auth"`
+	IdleTimeout uint64               `yaml:"idleTimeout"`
+}
+
+type SshClientAuthConfig struct {
+	Password       string `yaml:"password"`
+	PrivateKey     string `yaml:"privateKey"`
+	PrivateKeyPath string `yaml:"privateKeyPath"`
 }
 
 type ServerConfig struct {
@@ -85,8 +120,9 @@ type RestServerConfig struct {
 }
 
 type RestServerLoggingConfig struct {
-	Stdout   bool   `yaml:"stdout"`
-	Database string `yaml:"database"`
+	PayloadLogSizeLimit string `yaml:"payloadLogSizeLimit"`
+	Stdout              bool   `yaml:"stdout"`
+	Database            string `yaml:"database"`
 }
 
 type GrpcServerConfig struct {
@@ -96,8 +132,9 @@ type GrpcServerConfig struct {
 }
 
 type GrpcServerLoggingConfig struct {
-	Stdout   bool   `yaml:"stdout"`
-	Database string `yaml:"database"`
+	PayloadLogSizeLimit string `yaml:"payloadLogSizeLimit"`
+	Stdout              bool   `yaml:"stdout"`
+	Database            string `yaml:"database"`
 }
 
 type GraphQLServerConfig struct {
@@ -106,8 +143,9 @@ type GraphQLServerConfig struct {
 }
 
 type GraphQLServerLoggingConfig struct {
-	Stdout   bool   `yaml:"stdout"`
-	Database string `yaml:"database"`
+	PayloadLogSizeLimit string `yaml:"payloadLogSizeLimit"`
+	Stdout              bool   `yaml:"stdout"`
+	Database            string `yaml:"database"`
 }
 
 type HttpHttpsPortConfig struct {
@@ -333,8 +371,9 @@ type GoogleCloudPubsubPublisherConfig struct {
 }
 
 type GoogleCloudPubsubPublisherLoggingConfig struct {
-	Stdout   bool   `yaml:"stdout"`
-	Database string `yaml:"database"`
+	PayloadLogSizeLimit string `yaml:"payloadLogSizeLimit"`
+	Stdout              bool   `yaml:"stdout"`
+	Database            string `yaml:"database"`
 }
 
 type GoogleCloudPubsubSubscriberConfig struct {
@@ -342,8 +381,9 @@ type GoogleCloudPubsubSubscriberConfig struct {
 }
 
 type GoogleCloudPubsubSubscriberLoggingConfig struct {
-	Stdout   bool   `yaml:"stdout"`
-	Database string `yaml:"database"`
+	PayloadLogSizeLimit string `yaml:"payloadLogSizeLimit"`
+	Stdout              bool   `yaml:"stdout"`
+	Database            string `yaml:"database"`
 }
 
 type GoogleCloudOauth2VerificationConfig struct {
@@ -361,8 +401,36 @@ type ZeebeConfig struct {
 }
 
 type ElasticSearchConfig struct {
-	Addresses []string `yaml:"addresses"`
-	Username  string   `yaml:"username"`
-	Password  string   `yaml:"password"`
-	Disabled  bool     `yaml:"disabled"`
+	Addresses []string                    `yaml:"addresses"`
+	Username  string                      `yaml:"username"`
+	Password  string                      `yaml:"password"`
+	Logging   *ElasticSearchLoggingConfig `yaml:"logging"`
+	Disabled  bool                        `yaml:"disabled"`
+}
+
+type ElasticSearchLoggingConfig struct {
+	PayloadLogSizeLimit string `yaml:"payloadLogSizeLimit"`
+	Stdout              bool   `yaml:"stdout"`
+	Database            string `yaml:"database"`
+}
+
+type SftpConfig struct {
+	client map[string]*SftpClientConfig `yaml:"client"`
+}
+
+type SftpClientConfig struct {
+	Address        string                `yaml:"address"`
+	Authentication *SftpClientAuthConfig `yaml:"authentication"`
+}
+
+type SftpClientAuthConfig struct {
+	Type string `yaml:"type"` // password | key
+
+	// Password authentication fields
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+
+	// Key authentication fields
+	PathKey    string `yaml:"pathKey"`
+	EncodedKey string `yaml:"encodedKey"`
 }

@@ -8,7 +8,7 @@ import (
 	"google.golang.org/api/option"
 )
 
-func New(ctx context.Context, credentials *google.Credentials) (client *pubsub.Client) {
+func NewClient(ctx context.Context, credentials *google.Credentials) (client *pubsub.Client) {
 	var err error
 	client, err = pubsub.NewClient(ctx, credentials.ProjectID, option.WithCredentials(credentials))
 	if err != nil {

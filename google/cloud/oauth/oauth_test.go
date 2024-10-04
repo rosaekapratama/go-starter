@@ -52,7 +52,7 @@ func (s *OAuthTestSuite) SetupTest() {
 			Transport: &config.TransportConfig{
 				Client: &config.ClientConfig{
 					Rest: &config.RestClientConfig{
-						InsecureSkipVerify: false,
+						Insecure: false,
 					},
 				},
 			},
@@ -79,7 +79,7 @@ func TestOAuthTestSuite(t *testing.T) {
 }
 
 func (s *OAuthTestSuite) TestVerifyTokenHttpGetError() {
-	oauthClient := &ClientImpl{tokeninfoEndpoint: "test"}
+	oauthClient := &clientImpl{tokeninfoEndpoint: "test"}
 	mockLog.EXPECT().Error(mock.Anything, mock.Anything, errFailedToGetTokenInfo)
 	_, _ = oauthClient.VerifyToken(ctx, "token")
 }

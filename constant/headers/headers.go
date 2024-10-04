@@ -65,6 +65,7 @@ const (
 	WWWAuthenticate               = "WWW-Authenticate"
 
 	// Non-Standard
+	XForwardedHost         = "X-Forwarded-Host"
 	XFrameOptions          = "X-Frame-Options"
 	XXSSProtection         = "X-XSS-Protection"
 	ContentSecurityPolicy  = "Content-Security-Policy"

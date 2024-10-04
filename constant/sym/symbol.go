@@ -21,5 +21,6 @@ const (
 	CLoseSquareBracket = "]"
 	Circumflex         = "^"
 	Dollars            = "$"
-	Dash               = "-"
+	Hyphen             = "-"
+	Ellipsis           = "..."
 )

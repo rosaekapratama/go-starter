@@ -10,7 +10,7 @@ type IService interface {
 	GetJobListInLocation(ctx context.Context, location string) ([]*cloudscheduler.Job, error)
 }
 
-type ServiceImpl struct {
+type serviceImpl struct {
 	projectId        string
 	schedulerService *cloudscheduler.Service
 }

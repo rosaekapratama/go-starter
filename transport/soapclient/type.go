@@ -11,7 +11,7 @@ type IManager interface {
 	NewClient(ctx context.Context, opts ...ClientOption) (*Client, error)
 }
 
-type ManagerImpl struct {
+type managerImpl struct {
 	defaultClient *Client
 }
 
