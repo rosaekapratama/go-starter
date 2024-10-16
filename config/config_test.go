@@ -1,6 +1,7 @@
 package config
 
 import (
+	"flag"
 	"github.com/go-playground/assert/v2"
 	"github.com/rosaekapratama/go-starter/loginit"
 	"github.com/sirupsen/logrus"
@@ -176,7 +177,7 @@ func (s *ConfigTestSuite) SetupSuite() {
 	}
 
 	// Provider valid mock config file to os arguments
-	os.Args = []string{"", mockConfigFileName}
+	os.Args = []string{"cmd", "--config-path=" + mockConfigFileName}
 }
 
 func (s *ConfigTestSuite) TearDownSuite() {
@@ -199,6 +200,7 @@ func (s *ConfigTestSuite) TearDownTest() {
 	// Recover original logger
 	logger = oriLog
 	os.Args = oriArgs
+	flag.CommandLine = flag.NewFlagSet("", flag.ExitOnError) // Resets the flag set
 }
 
 func TestConfigTestSuite(t *testing.T) {
@@ -210,7 +212,7 @@ func (s *ConfigTestSuite) TestInitReadDefaultConfigFileError() {
 	temp := os.Args
 
 	// Replace os arguments with empty one so it will use default path config
-	os.Args = make([]string, 0)
+	os.Args = []string{"cmd"}
 
 	Init()
 	assert.Equal(s.T(), mockLog.Level, logrus.FatalLevel)
@@ -228,7 +230,7 @@ func (s *ConfigTestSuite) TestInitUnmarshalConfigFileError() {
 	if err != nil {
 		oriLog.Fatal(err)
 	}
-	os.Args = []string{"", fn}
+	os.Args = []string{"cmd", "--config-path=" + fn}
 
 	Init()
 	defer func() {
@@ -249,7 +251,7 @@ func (s *ConfigTestSuite) TestAppConfigIsNil() {
 	if err != nil {
 		oriLog.Fatal(err)
 	}
-	os.Args = []string{"", fn}
+	os.Args = []string{"", "--config-path=" + fn}
 
 	Init()
 	defer func() {
@@ -270,7 +272,7 @@ func (s *ConfigTestSuite) TestAppNameConfigIsEmpty() {
 	if err != nil {
 		oriLog.Fatal(err)
 	}
-	os.Args = []string{"", fn}
+	os.Args = []string{"cmd", "--config-path=" + fn}
 
 	Init()
 	defer func() {
