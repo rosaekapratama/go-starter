@@ -219,14 +219,22 @@ func (manager *managerImpl) GetConnectionIds() []string {
 	return keys
 }
 
-func (manager *managerImpl) DB(ctx context.Context, connectionID string) (*gorm.DB, *sql.DB, error) {
-
-	if gormDB, ok := manager.gormDBMap[connectionID]; ok {
-		if sqlDB, ok := manager.sqlDBMap[connectionID]; ok {
+func (manager *managerImpl) DB(ctx context.Context, connectionId string) (*gorm.DB, *sql.DB, error) {
+	if gormDB, ok := manager.gormDBMap[connectionId]; ok {
+		if sqlDB, ok := manager.sqlDBMap[connectionId]; ok {
 			return gormDB, sqlDB, nil
 		}
 	}
 
-	log.Errorf(ctx, response.GeneralError, "*gorm.DB and *sql.DB are not found, id=%s", connectionID)
+	log.Errorf(ctx, response.DBConnIdNotFound, "*gorm.DB and *sql.DB are not found, id=%s", connectionId)
 	return nil, nil, errInvalidConnectionId
+}
+
+func (manager *managerImpl) Begin(ctx context.Context, connectionId string) (*gorm.DB, error) {
+	if gormDB, ok := manager.gormDBMap[connectionId]; ok {
+		return gormDB.Begin(), nil
+	}
+
+	log.Errorf(ctx, response.DBConnIdNotFound, "*gorm.DB and *sql.DB are not found, id=%s", connectionId)
+	return nil, errInvalidConnectionId
 }

@@ -17,6 +17,7 @@ const (
 	InvalidPageRequest
 	DataNotFound
 	ConfigNotFound
+	DBConnIdNotFound
 	UnknownResponse
 	APINotRegistered
 	DataIsEmpty
@@ -44,6 +45,7 @@ var (
 		InvalidPageRequest:            "invalid page request",
 		DataNotFound:                  "data not found",
 		ConfigNotFound:                "config not found",
+		DBConnIdNotFound:              "database connection ID not found",
 		UnknownResponse:               "unknown response",
 		APINotRegistered:              "api is not registered, path=%s, method=%s",
 		DataIsEmpty:                   "data is empty",
@@ -70,6 +72,7 @@ var (
 		InvalidPageRequest:            http.StatusBadRequest,
 		DataNotFound:                  http.StatusOK,
 		ConfigNotFound:                http.StatusInternalServerError,
+		DBConnIdNotFound:              http.StatusInternalServerError,
 		UnknownResponse:               http.StatusInternalServerError,
 		APINotRegistered:              http.StatusNotFound,
 		DataIsEmpty:                   http.StatusOK,
@@ -95,6 +98,8 @@ var (
 		InvalidArgument:               otelCodes.Ok,
 		InvalidPageRequest:            otelCodes.Ok,
 		DataNotFound:                  otelCodes.Ok,
+		DBConnIdNotFound:              otelCodes.Error,
+		ConfigNotFound:                otelCodes.Error,
 		UnknownResponse:               otelCodes.Error,
 		APINotRegistered:              otelCodes.Ok,
 		DataIsEmpty:                   otelCodes.Ok,
@@ -120,6 +125,8 @@ var (
 		InvalidArgument:               grpcCodes.InvalidArgument,
 		InvalidPageRequest:            grpcCodes.InvalidArgument,
 		DataNotFound:                  grpcCodes.NotFound,
+		DBConnIdNotFound:              grpcCodes.Unknown,
+		ConfigNotFound:                grpcCodes.Unknown,
 		UnknownResponse:               grpcCodes.Unknown,
 		APINotRegistered:              grpcCodes.Unimplemented,
 		DataIsEmpty:                   grpcCodes.NotFound,
@@ -145,6 +152,8 @@ var (
 		InvalidArgument:               false,
 		InvalidPageRequest:            false,
 		DataNotFound:                  false,
+		DBConnIdNotFound:              true,
+		ConfigNotFound:                true,
 		UnknownResponse:               true,
 		APINotRegistered:              true,
 		DataIsEmpty:                   false,

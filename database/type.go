@@ -8,7 +8,8 @@ import (
 
 type IManager interface {
 	GetConnectionIds() []string
-	DB(ctx context.Context, connectionID string) (*gorm.DB, *sql.DB, error)
+	DB(ctx context.Context, connectionId string) (*gorm.DB, *sql.DB, error)
+	Begin(ctx context.Context, connectionId string) (*gorm.DB, error)
 }
 
 type managerImpl struct {
