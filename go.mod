@@ -7,6 +7,7 @@ require (
 	cloud.google.com/go/secretmanager v1.11.6
 	cloud.google.com/go/storage v1.39.1
 	firebase.google.com/go/v4 v4.13.0
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/bsm/redislock v0.9.4
 	github.com/camunda/zeebe/clients/go/v8 v8.4.5
 	github.com/elastic/go-elasticsearch/v8 v8.12.1
