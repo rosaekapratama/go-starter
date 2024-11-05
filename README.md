@@ -1,6 +1,6 @@
-# Go Common GG #
+# go-starter #
 
-Auto configuration and collection of modules for Go REST services powered by Gin web framework and GORM.
+Auto configuration and collection of modules for Go REST services powered by Gin web framework and GORM, now support GRPC also.
 
 ## Usage
 
